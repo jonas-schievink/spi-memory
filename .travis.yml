@@ -7,15 +7,18 @@ cache: cargo
 sudo: false
 env:
   global:
+    - TARGET_BUILD=thumbv7em-none-eabi
     - RUSTFLAGS="--deny warnings"
     - RUST_BACKTRACE=1
     - CARGO_INCREMENTAL=0  # decrease size of `target` to make the cache smaller
   matrix:
     - FEATURES=""  # default configuration
     - FEATURES="--all-features"
+install:
+  - rustup target add $TARGET_BUILD
 script:
-  - cargo build --all --examples $FEATURES
-  - cargo build --all --examples --release $FEATURES
+  - cargo build --all --examples --target $TARGET_BUILD $FEATURES
+  - cargo build --all --examples --target $TARGET_BUILD --release $FEATURES
 notifications:
   email:
     on_success: never
