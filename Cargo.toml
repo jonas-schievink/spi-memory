@@ -1,0 +1,53 @@
+[package]
+name = "spi-memory"
+version = "0.0.0"
+authors = ["Jonas Schievink <jonasschievink@gmail.com>"]
+edition = "2018"
+description = "A generic driver for different SPI Flash and EEPROM chips"
+documentation = "https://docs.rs/spi-memory/"
+repository = "https://github.com/jonas-schievink/spi-memory.git"
+keywords = ["embedded-hal-driver", "serial", "flash", "eeprom", "spi"]
+categories = ["embedded"]
+readme = "README.md"
+license = "0BSD"
+
+[dependencies]
+embedded-hal = "0.2.3"
+log = { version = "0.4.6", optional = true }
+bitflags = "1.0.4"
+
+[dev-dependencies]
+cortex-m = "0.6.0"
+cortex-m-rt = "0.6.8"
+cortex-m-semihosting = "0.3.3"
+stm32f4xx-hal = { version = "0.5.0", features = ["stm32f401"] }
+panic-semihosting = "0.5.2"
+
+[profile.dev]
+opt-level = "z"
+panic = "abort"
+
+# cargo-release configuration
+[package.metadata.release]
+tag-message = "{{version}}"
+no-dev-version = true
+pre-release-commit-message = "Release {{version}}"
+
+# Change the changelog's `Unreleased` section to refer to this release and
+# prepend new `Unreleased` section
+[[package.metadata.release.pre-release-replacements]]
+file    = "CHANGELOG.md"
+search  = "## Unreleased"
+replace = "## Unreleased\n\nNo changes.\n\n## {{version}} - {{date}}"
+
+# Bump the version inside the example manifest in `README.md`
+[[package.metadata.release.pre-release-replacements]]
+file    = "README.md"
+search  = 'spi-memory = "[a-z0-9\\.-]+"'
+replace = 'spi-memory = "{{version}}"'
+
+# Bump the version referenced by the `html_root_url` attribute in `lib.rs`
+[[package.metadata.release.pre-release-replacements]]
+file    = "src/lib.rs"
+search  = "https://docs.rs/spi-memory/[a-z0-9\\.-]+"
+replace = "https://docs.rs/spi-memory/{{version}}"
