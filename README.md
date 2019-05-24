@@ -21,7 +21,7 @@ Add an entry to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spi-memory = "0.0.0"
+spi-memory = "0.1.0"
 ```
 
 Check the [API Documentation](https://docs.rs/spi-memory/) for how to use the
