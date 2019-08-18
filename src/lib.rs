@@ -34,6 +34,10 @@ pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
     /// A GPIO could not be set.
     Gpio(GPIO::Error),
 
+    /// The data submitted for a write onto a Flash chip did not match its 
+    /// block length
+    BlockLength,
+
     /// Status register contained unexpected flags.
     ///
     /// This can happen when the chip is faulty, incorrectly connected, or the
@@ -55,7 +59,47 @@ where
             Error::Spi(spi) => write!(f, "Error::Spi({:?})", spi),
             Error::Gpio(gpio) => write!(f, "Error::Gpio({:?})", gpio),
             Error::UnexpectedStatus => f.write_str("Error::UnexpectedStatus"),
+            Error::BlockLength => f.write_str("Error::BlockLength"),
             Error::__NonExhaustive(_) => unreachable!(),
         }
     }
+}
+
+pub trait Read<Addr, SPI: Transfer<u8>, CS: OutputPin> {
+    /// Reads flash contents into `buf`, starting at `addr`.
+    ///
+    /// This will always read `buf.len()` worth of bytes, filling up `buf`
+    /// completely.
+    fn read(&mut self, addr: Addr, buf: &mut [u8]) -> Result<(), Error<SPI, CS>>;
+}
+
+pub trait FlashWrite<Addr, SPI: Transfer<u8>, CS: OutputPin> {
+    const BLOCK_LENGTH: usize;
+
+    /// Writes a block of data onto a flash memory chip, this function checks if the
+    /// block is the length set in the associated constant [BLOCK_LENGTH](FlashWrite.BLOCK_LENGTH)
+    /// and will throw an error if it isn't.
+    fn write(&mut self, addr: Addr, block: &[u8]) -> Result<(), Error<SPI, CS>> {
+        if block.len() == Self::BLOCK_LENGTH {
+            unsafe {
+                self.write_block_unchecked(addr, block)?;
+            }
+            Ok(())
+        }
+        else {
+            Err(Error::BlockLength)
+        }
+    }
+
+    /// Writes a block without checking wether it fits the block size
+    /// This function should never be used directly, instead the [write](FlashWrite.write) should be used
+    /// as it provides a safe frontend for this function
+    unsafe fn write_block_unchecked(&mut self, addr: Addr, block: &[u8]) -> Result<(), Error<SPI, CS>>;
+}
+
+pub trait EepromWrite<Addr, SPI: Transfer<u8>, CS: OutputPin> {
+    type Error;
+
+    /// Writes a block of data towards addr onto an EEPROM chip
+    fn write(&mut self, addr: Addr, block: &[u8]) -> Result<(), Error<SPI, CS>>;
 }
