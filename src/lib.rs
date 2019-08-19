@@ -65,41 +65,49 @@ where
     }
 }
 
+/// A trait for reading operations from a memory chip
 pub trait Read<Addr, SPI: Transfer<u8>, CS: OutputPin> {
-    /// Reads flash contents into `buf`, starting at `addr`.
+    /// Reads bytes from a memory chip
     ///
-    /// This will always read `buf.len()` worth of bytes, filling up `buf`
-    /// completely.
+    /// # Parameters
+    /// * `addr`: The address to start reading at
+    /// * `buf`: The buffer to read buf.len() bytes into
     fn read(&mut self, addr: Addr, buf: &mut [u8]) -> Result<(), Error<SPI, CS>>;
 }
 
-pub trait FlashWrite<Addr, SPI: Transfer<u8>, CS: OutputPin> {
+/// A trait for writing and erasing operations on a memory chip
+pub trait BlockDevice<Addr, SPI: Transfer<u8>, CS: OutputPin> {
+    /// The block length in bytes, should be set to 1 for EEPROM implementations
     const BLOCK_LENGTH: usize;
 
-    /// Writes a block of data onto a flash memory chip, this function checks if the
-    /// block is the length set in the associated constant [BLOCK_LENGTH](FlashWrite.BLOCK_LENGTH)
-    /// and will throw an error if it isn't.
-    fn write(&mut self, addr: Addr, block: &[u8]) -> Result<(), Error<SPI, CS>> {
-        if block.len() == Self::BLOCK_LENGTH {
-            unsafe {
-                self.write_block_unchecked(addr, block)?;
-            }
-            Ok(())
-        }
-        else {
+    /// Erases bytes from the memory chip
+    ///
+    /// This function will return a `BlockLength` error if `amount` is not a multiple
+    /// of [BLOCK_LENGTH](BlockDevice::BLOCK_LENGTH)
+    ///
+    /// # Parameters
+    /// * `addr`: The address to start erasing at
+    /// * `amount`: The amount of bytes to erase, starting at `addr`
+    fn erase_bytes(&mut self, addr: Addr, amount: Addr) -> Result<(), Error<SPI, CS>> {
+        if amount < Self::BLOCK_LENGTH || amount % Self::BLOCK_LENGTH != 0 {
             Err(Error::BlockLength)
+        }
+        unsafe {
+            erase_unchecked(addr, amount)
         }
     }
 
-    /// Writes a block without checking wether it fits the block size
-    /// This function should never be used directly, instead the [write](FlashWrite.write) should be used
-    /// as it provides a safe frontend for this function
-    unsafe fn write_block_unchecked(&mut self, addr: Addr, block: &[u8]) -> Result<(), Error<SPI, CS>>;
-}
+    /// The "internal" method called by [erase_bytes](BlockDevice::erase_bytes), this function doesn't
+    /// need to perform the checks regarding [BLOCK_LENGTH](BlockDevice::BLOCK_LENGTH) and is not supposed
+    /// to be called by the end user of this library (which is the reason it is marked unsafe)
+    unsafe fn erase_bytes_unchecked(&mut self, addr: Addr, amount: Addr) -> Result<(), Error<SPI, CS>>;
 
-pub trait EepromWrite<Addr, SPI: Transfer<u8>, CS: OutputPin> {
-    type Error;
-
-    /// Writes a block of data towards addr onto an EEPROM chip
-    fn write(&mut self, addr: Addr, block: &[u8]) -> Result<(), Error<SPI, CS>>;
+    /// Erases the memory chip fully
+    fn erase_all(&mut self) -> Result<(), Error<SPI, CS>>;
+    /// Writes bytes onto the memory chip
+    ///
+    /// # Parameters
+    /// * `addr`: The address to write to
+    /// * `data`: The bytes to write to `addr`
+    fn write_block(&mut self, addr: Addr, data: &[u8]) -> Result<(), Error<SPI, CS>>;
 }
