@@ -1,8 +1,9 @@
 //! Driver for 25-series SPI Flash and EEPROM chips.
 
-use crate::{utils::HexSlice, Error};
+use crate::{utils::HexSlice, Error, Read, BlockDevice};
 use bitflags::bitflags;
 use core::fmt;
+use core::convert::TryInto;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 
@@ -50,8 +51,8 @@ enum Opcode {
 bitflags! {
     /// Status register bits.
     pub struct Status: u8 {
-        /// **W**rite **I**n **P**rogress bit.
-        const WIP = 1 << 0;
+        /// Erase or write in progress
+        const BUSY = 1 << 0;
         /// Status of the **W**rite **E**nable **L**atch.
         const WEL = 1 << 1;
         /// The 3 protection region bits.
@@ -90,7 +91,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
 
         // Here we don't expect any writes to be in progress, and the latch must
         // also be deasserted.
-        if !(status & (Status::WIP | Status::WEL)).is_empty() {
+        if !(status & (Status::BUSY | Status::WEL)).is_empty() {
             return Err(Error::UnexpectedStatus);
         }
 
@@ -124,10 +125,15 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         Ok(Status::from_bits_truncate(buf[1]))
     }
 
+    fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
+        let mut cmd_buf = [Opcode::WriteEnable as u8];
+        self.command(&mut cmd_buf)?;
+        Ok(())
+    }
+}
+
+impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS>{
     /// Reads flash contents into `buf`, starting at `addr`.
-    ///
-    /// This will always read `buf.len()` worth of bytes, filling up `buf`
-    /// completely.
     ///
     /// Note that `addr` is not fully decoded: Flash chips will typically only
     /// look at the lowest `N` bits needed to encode their size, which means
@@ -137,9 +143,9 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     ///
     /// # Parameters
     ///
-    /// * **`addr`**: 24-bit address to start reading at.
-    /// * **`buf`**: Destination buffer to fill.
-    pub fn read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    /// * `addr`: 24-bit address to start reading at.
+    /// * `buf`: Destination buffer to fill.
+    fn read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), Error<SPI, CS>> {
         // TODO what happens if `buf` is empty?
 
         let mut cmd_buf = [
@@ -156,5 +162,53 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         }
         self.cs.set_high().map_err(Error::Gpio)?;
         spi_result.map(|_| ()).map_err(Error::Spi)
+    }
+}
+
+impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, CS> {
+    const SECTOR_LENGTH: usize = 4096;
+
+    unsafe fn erase_bytes_unchecked(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
+        Ok(())
+    }
+
+    fn write_bytes(&mut self, addr: u32, data: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+        let mut current_addr = addr;
+        for (c, chunk) in data.chunks_mut(256).enumerate() {
+            self.write_enable()?;
+
+            current_addr = (addr as usize + c * 256).try_into().unwrap();
+            let mut cmd_buf = [
+                Opcode::PageProg as u8,
+                (current_addr >> 16) as u8,
+                (current_addr >> 8) as u8,
+                current_addr as u8,
+            ];
+
+            self.cs.set_low().map_err(Error::Gpio)?;
+            let mut spi_result = self.spi.transfer(&mut cmd_buf);
+            if spi_result.is_ok() {
+                spi_result = self.spi.transfer(chunk);
+            }
+            self.cs.set_high().map_err(Error::Gpio)?;
+            spi_result.map(|_| ()).map_err(Error::Spi)?;
+        }
+        Ok(())
+    }
+
+    fn erase_all(&mut self) -> Result<(), Error<SPI, CS>> {
+        self.write_enable()?;
+        let mut cmd_buf = [Opcode::ChipErase as u8];
+        self.command(&mut cmd_buf)?;
+
+        let mut done = false;
+        // Wait until the erase is done
+        // TODO: maybe exchange this with a delay
+        while !done {
+            let status = self.read_status()?;
+            done = (status & Status::BUSY).is_empty();
+        }
+
+        Ok(())
     }
 }

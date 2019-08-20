@@ -17,6 +17,7 @@ mod utils;
 use core::fmt::{self, Debug};
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
+use core::convert::TryInto;
 
 mod private {
     #[derive(Debug)]
@@ -34,9 +35,9 @@ pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
     /// A GPIO could not be set.
     Gpio(GPIO::Error),
 
-    /// The data submitted for a write onto a Flash chip did not match its 
-    /// block length
-    BlockLength,
+    /// The data or the address submitted for a write onto a Flash chip did not match its 
+    /// sector length
+    SectorLength,
 
     /// Status register contained unexpected flags.
     ///
@@ -59,7 +60,7 @@ where
             Error::Spi(spi) => write!(f, "Error::Spi({:?})", spi),
             Error::Gpio(gpio) => write!(f, "Error::Gpio({:?})", gpio),
             Error::UnexpectedStatus => f.write_str("Error::UnexpectedStatus"),
-            Error::BlockLength => f.write_str("Error::BlockLength"),
+            Error::SectorLength => f.write_str("Error::SectorLength"),
             Error::__NonExhaustive(_) => unreachable!(),
         }
     }
@@ -76,31 +77,33 @@ pub trait Read<Addr, SPI: Transfer<u8>, CS: OutputPin> {
 }
 
 /// A trait for writing and erasing operations on a memory chip
-pub trait BlockDevice<Addr, SPI: Transfer<u8>, CS: OutputPin> {
-    /// The block length in bytes, should be set to 1 for EEPROM implementations
-    const BLOCK_LENGTH: usize;
+pub trait BlockDevice<Addr: TryInto<usize> + Copy, SPI: Transfer<u8>, CS: OutputPin> 
+    where <Addr as core::convert::TryInto<usize>>::Error : core::fmt::Debug,  
+    {
+    /// The sector length in bytes, should be set to 1 for EEPROM implementations
+    const SECTOR_LENGTH: usize;
 
     /// Erases bytes from the memory chip
     ///
-    /// This function will return a `BlockLength` error if `amount` is not a multiple
-    /// of [BLOCK_LENGTH](BlockDevice::BLOCK_LENGTH)
+    /// This function will return a `SectorLength` error if `amount` is not a multiple
+    /// of [SECTOR_LENGTH](BlockDevice::SECTOR_LENGTH)
     ///
     /// # Parameters
     /// * `addr`: The address to start erasing at
     /// * `amount`: The amount of bytes to erase, starting at `addr`
-    fn erase_bytes(&mut self, addr: Addr, amount: Addr) -> Result<(), Error<SPI, CS>> {
-        if amount < Self::BLOCK_LENGTH || amount % Self::BLOCK_LENGTH != 0 {
-            Err(Error::BlockLength)
+    fn erase_bytes(&mut self, addr: Addr, amount: usize) -> Result<(), Error<SPI, CS>> {
+        if amount < Self::SECTOR_LENGTH || amount % Self::SECTOR_LENGTH != 0 || addr.try_into().unwrap() % Self::SECTOR_LENGTH != 0  {
+            return Err(Error::SectorLength);
         }
         unsafe {
-            erase_unchecked(addr, amount)
+            self.erase_bytes_unchecked(addr, amount)
         }
     }
 
     /// The "internal" method called by [erase_bytes](BlockDevice::erase_bytes), this function doesn't
-    /// need to perform the checks regarding [BLOCK_LENGTH](BlockDevice::BLOCK_LENGTH) and is not supposed
+    /// need to perform the checks regarding [SECTOR_LENGTH](BlockDevice::SECTOR_LENGTH) and is not supposed
     /// to be called by the end user of this library (which is the reason it is marked unsafe)
-    unsafe fn erase_bytes_unchecked(&mut self, addr: Addr, amount: Addr) -> Result<(), Error<SPI, CS>>;
+    unsafe fn erase_bytes_unchecked(&mut self, addr: Addr, amount: usize) -> Result<(), Error<SPI, CS>>;
 
     /// Erases the memory chip fully
     fn erase_all(&mut self) -> Result<(), Error<SPI, CS>>;
@@ -109,5 +112,5 @@ pub trait BlockDevice<Addr, SPI: Transfer<u8>, CS: OutputPin> {
     /// # Parameters
     /// * `addr`: The address to write to
     /// * `data`: The bytes to write to `addr`
-    fn write_block(&mut self, addr: Addr, data: &[u8]) -> Result<(), Error<SPI, CS>>;
+    fn write_bytes(&mut self, addr: Addr, data: &mut [u8]) -> Result<(), Error<SPI, CS>>;
 }
