@@ -73,7 +73,7 @@ pub trait Read<Addr, SPI: Transfer<u8>, CS: OutputPin> {
     ///
     /// # Parameters
     /// * `addr`: The address to start reading at.
-    /// * `buf`: The buffer to read buf.len() bytes into.
+    /// * `buf`: The buffer to read `buf.len()` bytes into.
     fn read(&mut self, addr: Addr, buf: &mut [u8]) -> Result<(), Error<SPI, CS>>;
 }
 
