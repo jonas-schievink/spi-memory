@@ -89,7 +89,9 @@ where
     fn erase_sectors(&mut self, addr: Addr, amount: usize) -> Result<(), Error<SPI, CS>>;
 
     /// Erases the memory chip fully.
-    /// Warning: Full erase operations do take some time usually
+
+    /// Warning: Full erase operations can take a significant amount of time.
+    /// Check your device's datasheet for precise numbers.
     fn erase_all(&mut self) -> Result<(), Error<SPI, CS>>;
     /// Writes bytes onto the memory chip. This method is supposed to assume that the sectors
     /// it is writing to have already been erased and should not do any erasing themselves.
