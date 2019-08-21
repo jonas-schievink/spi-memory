@@ -1,9 +1,9 @@
 //! Driver for 25-series SPI Flash and EEPROM chips.
 
-use crate::{utils::HexSlice, Error, Read, BlockDevice};
+use crate::{utils::HexSlice, BlockDevice, Error, Read};
 use bitflags::bitflags;
-use core::fmt;
 use core::convert::TryInto;
+use core::fmt;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 
@@ -43,7 +43,7 @@ enum Opcode {
     WriteStatus = 0x01,
     Read = 0x03,
     PageProg = 0x02, // directly writes to EEPROMs too
-    SectorErase = 0xD7,
+    SectorErase = 0x20,
     BlockErase = 0xD8,
     ChipErase = 0xC7,
 }
@@ -132,7 +132,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     }
 }
 
-impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS>{
+impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS> {
     /// Reads flash contents into `buf`, starting at `addr`.
     ///
     /// Note that `addr` is not fully decoded: Flash chips will typically only
@@ -168,16 +168,41 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS>{
 impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, CS> {
     const SECTOR_LENGTH: usize = 4096;
 
-    unsafe fn erase_bytes_unchecked(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
+    unsafe fn erase_bytes_unchecked(
+        &mut self,
+        addr: u32,
+        amount: usize,
+    ) -> Result<(), Error<SPI, CS>> {
+        let amount = amount / Self::SECTOR_LENGTH;
+        for c in 0..amount {
+            self.write_enable()?;
+
+            let current_addr: u32 = (addr as usize + c * 256).try_into().unwrap();
+            let mut cmd_buf = [
+                Opcode::SectorErase as u8,
+                (current_addr >> 16) as u8,
+                (current_addr >> 8) as u8,
+                current_addr as u8,
+            ];
+            self.command(&mut cmd_buf)?;
+
+            let mut done = false;
+            // Wait until the erase is done
+            // TODO: maybe exchange this with a delay
+            while !done {
+                let status = self.read_status()?;
+                done = (status & Status::BUSY).is_empty();
+            }
+        }
+
         Ok(())
     }
 
     fn write_bytes(&mut self, addr: u32, data: &mut [u8]) -> Result<(), Error<SPI, CS>> {
-        let mut current_addr = addr;
         for (c, chunk) in data.chunks_mut(256).enumerate() {
             self.write_enable()?;
 
-            current_addr = (addr as usize + c * 256).try_into().unwrap();
+            let current_addr: u32 = (addr as usize + c * 256).try_into().unwrap();
             let mut cmd_buf = [
                 Opcode::PageProg as u8,
                 (current_addr >> 16) as u8,
@@ -192,6 +217,14 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
             }
             self.cs.set_high().map_err(Error::Gpio)?;
             spi_result.map(|_| ()).map_err(Error::Spi)?;
+
+            let mut done = false;
+            // Wait until the write is done
+            // TODO: maybe exchange this with a delay
+            while !done {
+                let status = self.read_status()?;
+                done = (status & Status::BUSY).is_empty();
+            }
         }
         Ok(())
     }
