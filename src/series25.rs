@@ -51,7 +51,7 @@ enum Opcode {
 bitflags! {
     /// Status register bits.
     pub struct Status: u8 {
-        /// Erase or write in progress
+        /// Erase or write in progress.
         const BUSY = 1 << 0;
         /// Status of the **W**rite **E**nable **L**atch.
         const WEL = 1 << 1;
@@ -130,6 +130,12 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         self.command(&mut cmd_buf)?;
         Ok(())
     }
+
+    fn wait_done(&mut self) -> Result<(), Error<SPI, CS>> {
+        // TODO: Consider changing this to a delay based pattern
+        while self.read_status()?.contains(Status::BUSY) {}
+        Ok(())
+    }
 }
 
 impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS> {
@@ -166,14 +172,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS> {
 }
 
 impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, CS> {
-    const SECTOR_LENGTH: usize = 4096;
-
-    unsafe fn erase_bytes_unchecked(
-        &mut self,
-        addr: u32,
-        amount: usize,
-    ) -> Result<(), Error<SPI, CS>> {
-        let amount = amount / Self::SECTOR_LENGTH;
+    fn erase_sectors(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
         for c in 0..amount {
             self.write_enable()?;
 
@@ -185,14 +184,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
                 current_addr as u8,
             ];
             self.command(&mut cmd_buf)?;
-
-            let mut done = false;
-            // Wait until the erase is done
-            // TODO: maybe exchange this with a delay
-            while !done {
-                let status = self.read_status()?;
-                done = (status & Status::BUSY).is_empty();
-            }
+            self.wait_done()?;
         }
 
         Ok(())
@@ -217,14 +209,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
             }
             self.cs.set_high().map_err(Error::Gpio)?;
             spi_result.map(|_| ()).map_err(Error::Spi)?;
-
-            let mut done = false;
-            // Wait until the write is done
-            // TODO: maybe exchange this with a delay
-            while !done {
-                let status = self.read_status()?;
-                done = (status & Status::BUSY).is_empty();
-            }
+            self.wait_done()?;
         }
         Ok(())
     }
@@ -233,15 +218,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
         self.write_enable()?;
         let mut cmd_buf = [Opcode::ChipErase as u8];
         self.command(&mut cmd_buf)?;
-
-        let mut done = false;
-        // Wait until the erase is done
-        // TODO: maybe exchange this with a delay
-        while !done {
-            let status = self.read_status()?;
-            done = (status & Status::BUSY).is_empty();
-        }
-
+        self.wait_done()?;
         Ok(())
     }
 }

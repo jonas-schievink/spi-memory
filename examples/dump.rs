@@ -26,8 +26,8 @@ use stm32f4xx_hal::spi::Spi;
 use stm32f4xx_hal::stm32 as pac;
 use stm32f4xx_hal::time::{Bps, MegaHertz};
 
-use spi_memory::series25::Flash;
 use spi_memory::prelude::*;
+use spi_memory::series25::Flash;
 
 use core::fmt::Write as _;
 

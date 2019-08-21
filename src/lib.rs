@@ -37,7 +37,7 @@ pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
     Gpio(GPIO::Error),
 
     /// The data or the address submitted for a write onto a Flash chip did not match its
-    /// sector length
+    /// sector length.
     SectorLength,
 
     /// Status register contained unexpected flags.
@@ -67,57 +67,35 @@ where
     }
 }
 
-/// A trait for reading operations from a memory chip
+/// A trait for reading operations from a memory chip.
 pub trait Read<Addr, SPI: Transfer<u8>, CS: OutputPin> {
-    /// Reads bytes from a memory chip
+    /// Reads bytes from a memory chip.
     ///
     /// # Parameters
-    /// * `addr`: The address to start reading at
-    /// * `buf`: The buffer to read buf.len() bytes into
+    /// * `addr`: The address to start reading at.
+    /// * `buf`: The buffer to read buf.len() bytes into.
     fn read(&mut self, addr: Addr, buf: &mut [u8]) -> Result<(), Error<SPI, CS>>;
 }
 
-/// A trait for writing and erasing operations on a memory chip
+/// A trait for writing and erasing operations on a memory chip.
 pub trait BlockDevice<Addr: TryInto<usize> + Copy, SPI: Transfer<u8>, CS: OutputPin>
 where
     <Addr as core::convert::TryInto<usize>>::Error: core::fmt::Debug,
 {
-    /// The sector length in bytes, should be set to 1 for EEPROM implementations
-    const SECTOR_LENGTH: usize;
-
-    /// Erases bytes from the memory chip
-    ///
-    /// This function will return a `SectorLength` error if `amount` is not a multiple
-    /// of [SECTOR_LENGTH](BlockDevice::SECTOR_LENGTH)
+    /// Erases sectors from the memory chip.
     ///
     /// # Parameters
-    /// * `addr`: The address to start erasing at
-    /// * `amount`: The amount of bytes to erase, starting at `addr`
-    fn erase_bytes(&mut self, addr: Addr, amount: usize) -> Result<(), Error<SPI, CS>> {
-        if amount < Self::SECTOR_LENGTH
-            || amount % Self::SECTOR_LENGTH != 0
-            || addr.try_into().unwrap() % Self::SECTOR_LENGTH != 0
-        {
-            return Err(Error::SectorLength);
-        }
-        unsafe { self.erase_bytes_unchecked(addr, amount) }
-    }
+    /// * `addr`: The address to start erasing at.
+    fn erase_sectors(&mut self, addr: Addr, amount: usize) -> Result<(), Error<SPI, CS>>;
 
-    /// The "internal" method called by [erase_bytes](BlockDevice::erase_bytes), this function doesn't
-    /// need to perform the checks regarding [SECTOR_LENGTH](BlockDevice::SECTOR_LENGTH) and is not supposed
-    /// to be called by the end user of this library (which is the reason it is marked unsafe)
-    unsafe fn erase_bytes_unchecked(
-        &mut self,
-        addr: Addr,
-        amount: usize,
-    ) -> Result<(), Error<SPI, CS>>;
-
-    /// Erases the memory chip fully
+    /// Erases the memory chip fully.
+    /// Warning: Full erase operations do take some time usually
     fn erase_all(&mut self) -> Result<(), Error<SPI, CS>>;
-    /// Writes bytes onto the memory chip
+    /// Writes bytes onto the memory chip. This method is supposed to assume that the sectors
+    /// it is writing to have already been erased and should not do any erasing themselves.
     ///
     /// # Parameters
-    /// * `addr`: The address to write to
-    /// * `data`: The bytes to write to `addr`
+    /// * `addr`: The address to write to.
+    /// * `data`: The bytes to write to `addr`.
     fn write_bytes(&mut self, addr: Addr, data: &mut [u8]) -> Result<(), Error<SPI, CS>>;
 }
