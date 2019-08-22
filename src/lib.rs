@@ -67,7 +67,7 @@ pub trait Read<Addr, SPI: Transfer<u8>, CS: OutputPin> {
     ///
     /// # Parameters
     /// * `addr`: The address to start reading at.
-    /// * `buf`: The buffer to read buf.len() bytes into.
+    /// * `buf`: The buffer to read `buf.len()` bytes into.
     fn read(&mut self, addr: Addr, buf: &mut [u8]) -> Result<(), Error<SPI, CS>>;
 }
 
@@ -80,13 +80,16 @@ pub trait BlockDevice<Addr, SPI: Transfer<u8>, CS: OutputPin> {
     fn erase_sectors(&mut self, addr: Addr, amount: usize) -> Result<(), Error<SPI, CS>>;
 
     /// Erases the memory chip fully.
-    /// Warning: Full erase operations do take some time usually
+
+    /// Warning: Full erase operations can take a significant amount of time.
+    /// Check your device's datasheet for precise numbers.
     fn erase_all(&mut self) -> Result<(), Error<SPI, CS>>;
     /// Writes bytes onto the memory chip. This method is supposed to assume that the sectors
     /// it is writing to have already been erased and should not do any erasing themselves.
     ///
     /// # Parameters
-    /// * `addr`: The address to write to.
+    /// * `addr`: The address to write to. If the address is not on a sector boundary,
+    /// the lower bits can be ignored in order to make it fit
     /// * `data`: The bytes to write to `addr`.
     fn write_bytes(&mut self, addr: Addr, data: &mut [u8]) -> Result<(), Error<SPI, CS>>;
 }
