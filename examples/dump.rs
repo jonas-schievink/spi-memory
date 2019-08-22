@@ -15,17 +15,18 @@
 extern crate panic_semihosting;
 
 use cortex_m_rt::entry;
-use stm32f4xx_hal::spi::Spi;
-use stm32f4xx_hal::stm32 as pac;
-use stm32f4xx_hal::gpio::GpioExt;
-use stm32f4xx_hal::time::{Bps, MegaHertz};
-use stm32f4xx_hal::rcc::RccExt;
-use stm32f4xx_hal::serial::{self, Serial};
-use embedded_hal::spi::MODE_0;
+use cortex_m_semihosting::hprintln;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::serial::Write;
-use cortex_m_semihosting::hprintln;
+use embedded_hal::spi::MODE_0;
+use stm32f4xx_hal::gpio::GpioExt;
+use stm32f4xx_hal::rcc::RccExt;
+use stm32f4xx_hal::serial::{self, Serial};
+use stm32f4xx_hal::spi::Spi;
+use stm32f4xx_hal::stm32 as pac;
+use stm32f4xx_hal::time::{Bps, MegaHertz};
 
+use spi_memory::prelude::*;
 use spi_memory::series25::Flash;
 
 use core::fmt::Write as _;
@@ -39,8 +40,7 @@ const BAUDRATE: u32 = 912600;
 /// Size of the flash chip in bytes.
 const SIZE_IN_BYTES: u32 = (MEGABITS * 1024 * 1024) / 8;
 
-
-fn print<'a, E>(buf: &[u8], w: &'a mut (dyn Write<u8, Error=E> + 'static)) {
+fn print<'a, E>(buf: &[u8], w: &'a mut (dyn Write<u8, Error = E> + 'static)) {
     for c in buf {
         write!(w, "{:02X}", c).unwrap();
     }
@@ -55,7 +55,7 @@ fn main() -> ! {
 
     let cs = {
         let mut cs = gpioa.pa9.into_push_pull_output();
-        cs.set_high().unwrap();  // deselect
+        cs.set_high().unwrap(); // deselect
         cs
     };
 
@@ -64,7 +64,13 @@ fn main() -> ! {
         let miso = gpioa.pa6.into_alternate_af5();
         let mosi = gpioa.pa7.into_alternate_af5();
 
-        Spi::spi1(periph.SPI1, (sck, miso, mosi), MODE_0, MegaHertz(1).into(), clocks)
+        Spi::spi1(
+            periph.SPI1,
+            (sck, miso, mosi),
+            MODE_0,
+            MegaHertz(1).into(),
+            clocks,
+        )
     };
 
     let mut serial = {
