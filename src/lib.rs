@@ -15,7 +15,6 @@ pub mod prelude;
 pub mod series25;
 mod utils;
 
-use core::convert::TryInto;
 use core::fmt::{self, Debug};
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
@@ -35,10 +34,6 @@ pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
 
     /// A GPIO could not be set.
     Gpio(GPIO::Error),
-
-    /// The data or the address submitted for a write onto a Flash chip did not match its
-    /// sector length.
-    SectorLength,
 
     /// Status register contained unexpected flags.
     ///
@@ -61,7 +56,6 @@ where
             Error::Spi(spi) => write!(f, "Error::Spi({:?})", spi),
             Error::Gpio(gpio) => write!(f, "Error::Gpio({:?})", gpio),
             Error::UnexpectedStatus => f.write_str("Error::UnexpectedStatus"),
-            Error::SectorLength => f.write_str("Error::SectorLength"),
             Error::__NonExhaustive(_) => unreachable!(),
         }
     }
@@ -78,10 +72,7 @@ pub trait Read<Addr, SPI: Transfer<u8>, CS: OutputPin> {
 }
 
 /// A trait for writing and erasing operations on a memory chip.
-pub trait BlockDevice<Addr: TryInto<usize> + Copy, SPI: Transfer<u8>, CS: OutputPin>
-where
-    <Addr as core::convert::TryInto<usize>>::Error: core::fmt::Debug,
-{
+pub trait BlockDevice<Addr, SPI: Transfer<u8>, CS: OutputPin> {
     /// Erases sectors from the memory chip.
     ///
     /// # Parameters
