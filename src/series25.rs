@@ -138,7 +138,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     }
 }
 
-impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS> {
+impl<SPI: Transfer<u8>, CS: OutputPin> Read<SPI, CS> for Flash<SPI, CS> {
     /// Reads flash contents into `buf`, starting at `addr`.
     ///
     /// Note that `addr` is not fully decoded: Flash chips will typically only
@@ -171,7 +171,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS> {
     }
 }
 
-impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, CS> {
+impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
     fn erase_sectors(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
         for c in 0..amount {
             self.write_enable()?;
