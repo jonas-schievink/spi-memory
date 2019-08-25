@@ -112,3 +112,49 @@ impl<DIE0, DIE1, SPI, CS> W25M<SPI, CS, DIE0, DIE1, Die1>
         })
     }
 }
+
+impl<DIE0, DIE1, SPI, CS, DIE> BlockDevice<SPI, CS> for W25M<SPI, CS, DIE0, DIE1, DIE>  
+where DIE0: Stackable<SPI, CS>,
+DIE1: Stackable<SPI, CS>,
+SPI: Transfer<u8>,
+CS: OutputPin
+{
+    fn erase_sectors(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
+        match &mut self.inner {
+            Inner::Die0(die) => die.erase_sectors(addr, amount),
+            Inner::Die1(die) => die.erase_sectors(addr, amount),
+            _ => unreachable!()
+        }
+    }
+
+    fn erase_all(&mut self) -> Result<(), Error<SPI, CS>> {
+        match &mut self.inner {
+            Inner::Die0(die) => die.erase_all(),
+            Inner::Die1(die) => die.erase_all(),
+            _ => unreachable!()
+        }
+    }
+
+    fn write_bytes(&mut self, addr: u32, data: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+        match &mut self.inner {
+            Inner::Die0(die) => die.write_bytes(addr, data),
+            Inner::Die1(die) => die.write_bytes(addr, data),
+            _ => unreachable!()
+        }
+    }
+}
+
+impl<DIE0, DIE1, SPI, CS, DIE> Read<SPI, CS> for W25M<SPI, CS, DIE0, DIE1, DIE>  
+where DIE0: Stackable<SPI, CS>,
+DIE1: Stackable<SPI, CS>,
+SPI: Transfer<u8>,
+CS: OutputPin
+{
+    fn read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+        match &mut self.inner { 
+            Inner::Die0(die) => die.read(addr, buf),
+            Inner::Die1(die) => die.read(addr, buf),
+            _ => unreachable!()
+        }
+    }
+}
