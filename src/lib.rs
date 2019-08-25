@@ -82,7 +82,7 @@ pub trait BlockDevice<SPI: Transfer<u8>, CS: OutputPin> {
     fn erase_sectors(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>>;
 
     /// Erases the memory chip fully.
-
+    ///
     /// Warning: Full erase operations can take a significant amount of time.
     /// Check your device's datasheet for precise numbers.
     fn erase_all(&mut self) -> Result<(), Error<SPI, CS>>;
