@@ -14,6 +14,7 @@ mod log;
 pub mod prelude;
 pub mod series25;
 pub mod w25m;
+pub mod w25n;
 mod utils;
 
 use core::fmt::{self, Debug};
@@ -74,20 +75,22 @@ pub trait Read<SPI: Transfer<u8>, CS: OutputPin> {
 
 /// A trait for writing and erasing operations on a memory chip.
 pub trait BlockDevice<SPI: Transfer<u8>, CS: OutputPin> {
-    /// Erases sectors from the memory chip.
+    /// Erases the smallest available unit from the memory chip. For Flash this should be
+    /// blocks or sectors, for EEPROM single bytes
     ///
     /// # Parameters
-    /// * `addr`: The address to start erasing at. If the address is not on a sector boundary,
+    /// * `addr`: The address to start erasing at. If the address is not on a block boundary,
     /// the lower bits can be ignored in order to make it fit
-    fn erase_sectors(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>>;
+    fn erase(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>>;
 
     /// Erases the memory chip fully.
     ///
     /// Warning: Full erase operations can take a significant amount of time.
     /// Check your device's datasheet for precise numbers.
     fn erase_all(&mut self) -> Result<(), Error<SPI, CS>>;
-    /// Writes bytes onto the memory chip. This method is supposed to assume that the sectors
-    /// it is writing to have already been erased and should not do any erasing themselves.
+    /// Writes bytes onto the smallest writable unit of the memory chip. This method is
+    /// supposed to assume that the sectors it is writing to have already been erased and
+    /// should not do any erasing themselves.
     ///
     /// # Parameters
     /// * `addr`: The address to write to.

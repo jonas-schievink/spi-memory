@@ -1,68 +1,41 @@
-//! Driver for 25-series SPI Flash and EEPROM chips.
-
-use crate::{utils::HexSlice, BlockDevice, Error, Read};
-use bitflags::bitflags;
-use core::convert::TryInto;
-use core::fmt;
+use crate::{BlockDevice, Error, Read};
+use crate::w25m::Stackable;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
+use bitflags::bitflags;
+use core::fmt::Debug;
+use core::convert::TryInto;
 
-/// 3-Byte JEDEC manufacturer and device identification.
-pub struct Identification {
-    /// The received bytes, in order.
-    ///
-    /// First 1 or 2 Bytes are the JEDEC manufacturer ID, last 1-2 Bytes are the
-    /// device ID. How many bytes are used depends on manufacturer's place in
-    /// the JEDEC list, I guess.
-    bytes: [u8; 3],
-}
-
-impl fmt::Debug for Identification {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Identification")
-            .field(&HexSlice(self.bytes))
-            .finish()
-    }
-}
-
-#[allow(unused)] // TODO support more features
 enum Opcode {
-    /// Read the 8-bit legacy device ID.
-    ReadDeviceId = 0xAB,
-    /// Read the 8-bit manufacturer and device IDs.
-    ReadMfDId = 0x90,
-    /// Read the 16-bit manufacturer ID and 8-bit device ID.
-    ReadJedecId = 0x9F,
-    /// Set the write enable latch.
-    WriteEnable = 0x06,
-    /// Clear the write enable latch.
-    WriteDisable = 0x04,
-    /// Read the 8-bit status register.
+    // Read one of the 3 8 bit status registers
     ReadStatus = 0x05,
-    /// Write the 8-bit status register. Not all bits are writeable.
-    WriteStatus = 0x01,
-    Read = 0x03,
-    PageProg = 0x02, // directly writes to EEPROMs too
-    SectorErase = 0x20,
+    // Set the write enable latch.
+    WriteEnable = 0x06,
+    // Write to one of the three status registers
+    WriteStatus = 0x1F,
+    // Erase a 128 kb block
     BlockErase = 0xD8,
-    ChipErase = 0xC7,
+    // Read one page of data into the buffer
+    PageDataRead = 0x13,
+    // Read data from the buffer
+    ReadData = 0x03,
+    // Write a page of data from the buffer into a memory region
+    ProgramExecute = 0x10,
+    // Write a page of data into the buffer
+    RandomLoadProgramData = 0x84,
 }
 
 bitflags! {
     /// Status register bits.
-    pub struct Status: u8 {
+    pub struct Status3: u8 {
         /// Erase or write in progress.
         const BUSY = 1 << 0;
         /// Status of the **W**rite **E**nable **L**atch.
         const WEL = 1 << 1;
-        /// The 3 protection region bits.
-        const PROT = 0b00011100;
-        /// **S**tatus **R**egister **W**rite **D**isable bit.
-        const SRWD = 1 << 7;
     }
 }
 
-/// Driver for 25-series SPI Flash chips.
+/// Driver for W25N series SPI Flash chips.
 ///
 /// # Type Parameters
 ///
@@ -86,15 +59,17 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     ///   of the flash chip. Will be driven low when accessing the device.
     pub fn init(spi: SPI, cs: CS) -> Result<Self, Error<SPI, CS>> {
         let mut this = Self { spi, cs };
-        let status = this.read_status()?;
+        let status = this.read_status_3()?;
         info!("Flash::init: status = {:?}", status);
-
         // Here we don't expect any writes to be in progress, and the latch must
         // also be deasserted.
-        if !(status & (Status::BUSY | Status::WEL)).is_empty() {
+        if !(status & (Status3::BUSY | Status3::WEL)).is_empty() {
             return Err(Error::UnexpectedStatus);
         }
 
+        // write to config register 2, set BUF=0 (continious mode) and everything else on reset
+        this.command(&mut [Opcode::WriteStatus as u8, 0xA0, 0b00000010])?;
+        this.command(&mut [Opcode::WriteStatus as u8, 0xB0, 0b00010000])?;
         Ok(this)
     }
 
@@ -107,22 +82,11 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         Ok(())
     }
 
-    /// Reads the JEDEC manufacturer/device identification.
-    pub fn read_jedec_id(&mut self) -> Result<Identification, Error<SPI, CS>> {
-        let mut buf = [Opcode::ReadJedecId as u8, 0, 0, 0];
+    /// Reads status register 3
+    pub fn read_status_3(&mut self) -> Result<Status3, Error<SPI, CS>> {
+        let mut buf = [Opcode::ReadStatus as u8, 0xC0, 0];
         self.command(&mut buf)?;
-
-        Ok(Identification {
-            bytes: [buf[1], buf[2], buf[3]],
-        })
-    }
-
-    /// Reads the status register.
-    pub fn read_status(&mut self) -> Result<Status, Error<SPI, CS>> {
-        let mut buf = [Opcode::ReadStatus as u8, 0];
-        self.command(&mut buf)?;
-
-        Ok(Status::from_bits_truncate(buf[1]))
+        Ok(Status3::from_bits_truncate(buf[2]))
     }
 
     fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
@@ -133,32 +97,43 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
 
     fn wait_done(&mut self) -> Result<(), Error<SPI, CS>> {
         // TODO: Consider changing this to a delay based pattern
-        while self.read_status()?.contains(Status::BUSY) {}
+        while self.read_status_3()?.contains(Status3::BUSY) {}
         Ok(())
     }
 }
 
+impl<SPI: Transfer<u8>, CS: OutputPin> Stackable<SPI,CS> for Flash<SPI,CS> 
+where
+    SPI::Error: Debug,
+    CS::Error: Debug,
+{
+    fn new(spi: SPI, cs: CS) -> Result<Self, Error<SPI, CS>> {
+        Flash::init(spi, cs)
+    }
+
+    fn free(self) -> (SPI, CS) {
+        (self.spi, self.cs)
+    }
+}
+
 impl<SPI: Transfer<u8>, CS: OutputPin> Read<SPI, CS> for Flash<SPI, CS> {
-    /// Reads flash contents into `buf`, starting at `addr`.
-    ///
-    /// Note that `addr` is not fully decoded: Flash chips will typically only
-    /// look at the lowest `N` bits needed to encode their size, which means
-    /// that the contents are "mirrored" to addresses that are a multiple of the
-    /// flash size. Only 24 bits of `addr` are transferred to the device in any
-    /// case, limiting the maximum size of 25-series SPI flash chips to 16 MiB.
-    ///
-    /// # Parameters
-    ///
-    /// * `addr`: 24-bit address to start reading at.
-    /// * `buf`: Destination buffer to fill.
     fn read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), Error<SPI, CS>> {
-        // TODO what happens if `buf` is empty?
+        let start_addr: u16 = (addr / 2048).try_into().unwrap(); // page address = addr / 2048 byte
+        let mut cmd_buf = [
+            Opcode::PageDataRead as u8,
+            0, // dummy cycles
+            (start_addr >> 8) as u8,
+            start_addr as u8
+        ];
+
+        self.command(&mut cmd_buf)?;
+        self.wait_done()?;
 
         let mut cmd_buf = [
-            Opcode::Read as u8,
-            (addr >> 16) as u8,
-            (addr >> 8) as u8,
-            addr as u8,
+            Opcode::ReadData as u8,
+            0, // 24 dummy cycles
+            0,
+            0,
         ];
 
         self.cs.set_low().map_err(Error::Gpio)?;
@@ -167,19 +142,21 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<SPI, CS> for Flash<SPI, CS> {
             spi_result = self.spi.transfer(buf);
         }
         self.cs.set_high().map_err(Error::Gpio)?;
+        self.wait_done()?;
         spi_result.map(|_| ()).map_err(Error::Spi)
     }
 }
 
 impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
     fn erase(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
+        let start_addr: u16 = (addr / 2048).try_into().unwrap(); // page address = addr / 2048 byte
         for c in 0..amount {
             self.write_enable()?;
 
-            let current_addr: u32 = (addr as usize + c * 256).try_into().unwrap();
+            let current_addr: u16 = (start_addr as usize + c).try_into().unwrap();
             let mut cmd_buf = [
-                Opcode::SectorErase as u8,
-                (current_addr >> 16) as u8,
+                Opcode::BlockErase as u8,
+                0, // 8 dummy cycles
                 (current_addr >> 8) as u8,
                 current_addr as u8,
             ];
@@ -191,15 +168,17 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
     }
 
     fn write_bytes(&mut self, addr: u32, data: &mut [u8]) -> Result<(), Error<SPI, CS>> {
-        for (c, chunk) in data.chunks_mut(256).enumerate() {
+        let start_addr: u16 = (addr / 2048).try_into().unwrap(); // page address = addr / 2048 byte
+        let mut current_addr = start_addr;
+        data.reverse();
+        for chunk in data.chunks_mut(2048).rev() {
+            chunk.reverse();
             self.write_enable()?;
-
-            let current_addr: u32 = (addr as usize + c * 256).try_into().unwrap();
+            let column_addr: u16 = current_addr % 2048;
             let mut cmd_buf = [
-                Opcode::PageProg as u8,
-                (current_addr >> 16) as u8,
-                (current_addr >> 8) as u8,
-                current_addr as u8,
+                Opcode::RandomLoadProgramData as u8,
+                (column_addr >> 8) as u8,
+                column_addr as u8,
             ];
 
             self.cs.set_low().map_err(Error::Gpio)?;
@@ -209,16 +188,42 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
             }
             self.cs.set_high().map_err(Error::Gpio)?;
             spi_result.map(|_| ()).map_err(Error::Spi)?;
+
             self.wait_done()?;
+
+            let mut cmd_buf = [
+                Opcode::ProgramExecute as u8,
+                0, // 8 dummy cycles
+                (current_addr >> 8) as u8,
+                current_addr as u8,
+            ];
+            self.command(&mut cmd_buf)?;
+            self.wait_done()?;
+            current_addr = current_addr + chunk.len() as u16;
         }
         Ok(())
     }
 
     fn erase_all(&mut self) -> Result<(), Error<SPI, CS>> {
-        self.write_enable()?;
-        let mut cmd_buf = [Opcode::ChipErase as u8];
-        self.command(&mut cmd_buf)?;
-        self.wait_done()?;
-        Ok(())
+        self.erase(0, 1024)
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

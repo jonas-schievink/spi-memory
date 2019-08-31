@@ -9,14 +9,14 @@ pub struct Die0;
 pub struct Die1;
 
 /// All dies which are supposed to be supported by the W25M struct have to implement this trait
-pub trait Stackable<SPI: Transfer<u8>, CS: OutputPin>: BlockDevice<SPI, CS> + Read<SPI, CS> {
-    fn new(spi: SPI, cs: CS) -> Self;
+pub trait Stackable<SPI: Transfer<u8>, CS: OutputPin>: BlockDevice<SPI, CS> + Read<SPI, CS> + Sized {
+    fn new(spi: SPI, cs: CS) -> Result<Self, Error<SPI, CS>>;
     /// Returns the SPI and chip select objects so they can be used elsewhere
     fn free(self) -> (SPI, CS);
 }
 
 #[derive(Debug)]
-pub struct W25M<SPI, CS, DIE0, DIE1, DIE> 
+pub struct Flash<SPI, CS, DIE0, DIE1, DIE> 
 {
     inner: Inner<DIE0, DIE1>,
     spi: Option<SPI>,
@@ -31,19 +31,19 @@ enum Inner<DIE0, DIE1> {
     Dummy,
 }
 
-impl<DIE0, DIE1, SPI, CS, DIE> W25M<SPI, CS, DIE0, DIE1, DIE> 
+impl<DIE0, DIE1, SPI, CS, DIE> Flash<SPI, CS, DIE0, DIE1, DIE> 
     where DIE0: Stackable<SPI, CS>,
     DIE1: Stackable<SPI, CS>,
     SPI: Transfer<u8>,
     CS: OutputPin 
 {
-    pub fn new(spi: SPI, cs: CS) -> W25M<SPI, CS, DIE0, DIE1, Die0> {
-        W25M{
-            inner: Inner::Die0(DIE0::new(spi, cs)),
+    pub fn new(spi: SPI, cs: CS) -> Result<Flash<SPI, CS, DIE0, DIE1, Die0>, Error<SPI, CS>> {
+        Ok(Flash{
+            inner: Inner::Die0(DIE0::new(spi, cs)?),
             spi: None,
             cs: None,
             _die: PhantomData
-        }
+        })
     }
 
     // TODO: This is a duplicate from the series25 implementation, deduplicate this
@@ -57,13 +57,13 @@ impl<DIE0, DIE1, SPI, CS, DIE> W25M<SPI, CS, DIE0, DIE1, DIE>
     }
 }
 
-impl<DIE0, DIE1, SPI, CS> W25M<SPI, CS, DIE0, DIE1, Die0> 
+impl<DIE0, DIE1, SPI, CS> Flash<SPI, CS, DIE0, DIE1, Die0> 
     where DIE0: Stackable<SPI, CS>,
     DIE1: Stackable<SPI, CS>,
     SPI: Transfer<u8>,
     CS: OutputPin 
 {
-    pub fn switch_die(mut self) -> Result<W25M<SPI, CS, DIE0, DIE1, Die1>, Error<SPI, CS>> {
+    pub fn switch_die(mut self) -> Result<Flash<SPI, CS, DIE0, DIE1, Die1>, Error<SPI, CS>> {
         let (spi, cs) = match mem::replace(&mut self.inner, Inner::Dummy) {
             Inner::Die0(die) => die.free(),
             _ => unreachable!()
@@ -76,8 +76,8 @@ impl<DIE0, DIE1, SPI, CS> W25M<SPI, CS, DIE0, DIE1, Die0>
         let spi = mem::replace(&mut self.spi, None).unwrap();
         let cs = mem::replace(&mut self.cs, None).unwrap();
 
-        Ok(W25M{
-            inner: Inner::Die1(DIE1::new(spi, cs)),
+        Ok(Flash{
+            inner: Inner::Die1(DIE1::new(spi, cs)?),
             spi: None,
             cs: None,
             _die: PhantomData
@@ -85,13 +85,13 @@ impl<DIE0, DIE1, SPI, CS> W25M<SPI, CS, DIE0, DIE1, Die0>
     }
 }
 
-impl<DIE0, DIE1, SPI, CS> W25M<SPI, CS, DIE0, DIE1, Die1> 
+impl<DIE0, DIE1, SPI, CS> Flash<SPI, CS, DIE0, DIE1, Die1> 
     where DIE0: Stackable<SPI, CS>,
     DIE1: Stackable<SPI, CS>,
     SPI: Transfer<u8>,
     CS: OutputPin 
 {
-    pub fn switch_die(mut self) -> Result<W25M<SPI, CS, DIE0, DIE1, Die0>, Error<SPI, CS>> {
+    pub fn switch_die(mut self) -> Result<Flash<SPI, CS, DIE0, DIE1, Die0>, Error<SPI, CS>> {
         let (spi, cs) = match mem::replace(&mut self.inner, Inner::Dummy) {
             Inner::Die1(die) => die.free(),
             _ => unreachable!()
@@ -104,8 +104,8 @@ impl<DIE0, DIE1, SPI, CS> W25M<SPI, CS, DIE0, DIE1, Die1>
         let spi = mem::replace(&mut self.spi, None).unwrap();
         let cs = mem::replace(&mut self.cs, None).unwrap();
 
-        Ok(W25M{
-            inner: Inner::Die0(DIE0::new(spi, cs)),
+        Ok(Flash{
+            inner: Inner::Die0(DIE0::new(spi, cs)?),
             spi: None,
             cs: None,
             _die: PhantomData
@@ -113,16 +113,16 @@ impl<DIE0, DIE1, SPI, CS> W25M<SPI, CS, DIE0, DIE1, Die1>
     }
 }
 
-impl<DIE0, DIE1, SPI, CS, DIE> BlockDevice<SPI, CS> for W25M<SPI, CS, DIE0, DIE1, DIE>  
+impl<DIE0, DIE1, SPI, CS, DIE> BlockDevice<SPI, CS> for Flash<SPI, CS, DIE0, DIE1, DIE>  
 where DIE0: Stackable<SPI, CS>,
 DIE1: Stackable<SPI, CS>,
 SPI: Transfer<u8>,
 CS: OutputPin
 {
-    fn erase_sectors(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
+    fn erase(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
         match &mut self.inner {
-            Inner::Die0(die) => die.erase_sectors(addr, amount),
-            Inner::Die1(die) => die.erase_sectors(addr, amount),
+            Inner::Die0(die) => die.erase(addr, amount),
+            Inner::Die1(die) => die.erase(addr, amount),
             _ => unreachable!()
         }
     }
@@ -144,7 +144,7 @@ CS: OutputPin
     }
 }
 
-impl<DIE0, DIE1, SPI, CS, DIE> Read<SPI, CS> for W25M<SPI, CS, DIE0, DIE1, DIE>  
+impl<DIE0, DIE1, SPI, CS, DIE> Read<SPI, CS> for Flash<SPI, CS, DIE0, DIE1, DIE>  
 where DIE0: Stackable<SPI, CS>,
 DIE1: Stackable<SPI, CS>,
 SPI: Transfer<u8>,
