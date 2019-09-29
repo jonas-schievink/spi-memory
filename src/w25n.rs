@@ -22,7 +22,7 @@ enum Opcode {
     // Write a page of data from the buffer into a memory region
     ProgramExecute = 0x10,
     // Write a page of data into the buffer
-    RandomLoadProgramData = 0x84,
+    LoadProgramData = 0x02,
 }
 
 bitflags! {
@@ -153,7 +153,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
         for c in 0..amount {
             self.write_enable()?;
 
-            let current_addr: u16 = (start_addr as usize + c).try_into().unwrap();
+            let current_addr: u16 = (start_addr as usize + 64 * c).try_into().unwrap();
             let mut cmd_buf = [
                 Opcode::BlockErase as u8,
                 0, // 8 dummy cycles
@@ -170,15 +170,15 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
     fn write_bytes(&mut self, addr: u32, data: &mut [u8]) -> Result<(), Error<SPI, CS>> {
         let start_addr: u16 = (addr / 2048).try_into().unwrap(); // page address = addr / 2048 byte
         let mut current_addr = start_addr;
+        assert!(data.len() % 2048 == 0);
         data.reverse();
         for chunk in data.chunks_mut(2048).rev() {
             chunk.reverse();
             self.write_enable()?;
-            let column_addr: u16 = current_addr % 2048;
             let mut cmd_buf = [
-                Opcode::RandomLoadProgramData as u8,
-                (column_addr >> 8) as u8,
-                column_addr as u8,
+                Opcode::LoadProgramData as u8,
+                0,
+                0
             ];
 
             self.cs.set_low().map_err(Error::Gpio)?;
@@ -199,7 +199,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
             ];
             self.command(&mut cmd_buf)?;
             self.wait_done()?;
-            current_addr = current_addr + chunk.len() as u16;
+            current_addr += 1;
         }
         Ok(())
     }
