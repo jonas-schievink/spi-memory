@@ -1,0 +1,12 @@
+# Backup and autosave files
+_autosave*
+*.sch-bak
+*.kicad_pcb-bak
+
+# Netlist. Generated from schematic.
+*.net
+
+# "Intermediate Netlist" (?) created by BOM generation
+*.xml
+
+fp-info-cache
