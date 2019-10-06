@@ -1,6 +1,9 @@
 //! Driver for 25-series SPI Flash and EEPROM chips.
 
-use crate::{utils::{HexSlice, spi_command}, BlockDevice, Error, Read};
+use crate::{
+    utils::{spi_command, HexSlice},
+    BlockDevice, Error, Read,
+};
 use bitflags::bitflags;
 use core::convert::TryInto;
 use core::fmt;

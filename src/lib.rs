@@ -13,9 +13,9 @@
 mod log;
 pub mod prelude;
 pub mod series25;
+mod utils;
 pub mod w25m;
 pub mod w25n;
-mod utils;
 
 use core::fmt::{self, Debug};
 use embedded_hal::blocking::spi::Transfer;

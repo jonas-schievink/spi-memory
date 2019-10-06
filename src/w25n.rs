@@ -1,11 +1,11 @@
-use crate::{BlockDevice, Error, Read};
-use crate::w25m::Stackable;
 use crate::utils::spi_command;
+use crate::w25m::Stackable;
+use crate::{BlockDevice, Error, Read};
+use bitflags::bitflags;
+use core::convert::TryInto;
+use core::fmt::Debug;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
-use bitflags::bitflags;
-use core::fmt::Debug;
-use core::convert::TryInto;
 
 enum Opcode {
     // Read one of the 3 8 bit status registers
@@ -63,7 +63,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         this.setup()?;
         Ok(this)
     }
-    
+
     fn setup(&mut self) -> Result<(), Error<SPI, CS>> {
         let status = self.read_status_3()?;
         info!("Flash::init: status = {:?}", status);
@@ -74,11 +74,18 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         }
 
         // write to config register 2, set BUF=0 (continious mode) and everything else on reset
-        spi_command(&mut self.spi, &mut self.cs, &mut [Opcode::WriteStatus as u8, 0xA0, 0b00000010])?;
-        spi_command(&mut self.spi, &mut self.cs, &mut [Opcode::WriteStatus as u8, 0xB0, 0b00010000])?;
+        spi_command(
+            &mut self.spi,
+            &mut self.cs,
+            &mut [Opcode::WriteStatus as u8, 0xA0, 0b00000010],
+        )?;
+        spi_command(
+            &mut self.spi,
+            &mut self.cs,
+            &mut [Opcode::WriteStatus as u8, 0xB0, 0b00010000],
+        )?;
         Ok(())
     }
-
 
     /// Reads status register 3
     pub fn read_status_3(&mut self) -> Result<Status3, Error<SPI, CS>> {
@@ -100,7 +107,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     }
 }
 
-impl<SPI: Transfer<u8>, CS: OutputPin> Stackable<SPI,CS> for Flash<SPI,CS> 
+impl<SPI: Transfer<u8>, CS: OutputPin> Stackable<SPI, CS> for Flash<SPI, CS>
 where
     SPI::Error: Debug,
     CS::Error: Debug,
@@ -121,7 +128,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<SPI, CS> for Flash<SPI, CS> {
             Opcode::PageDataRead as u8,
             0, // dummy cycles
             (start_addr >> 8) as u8,
-            start_addr as u8
+            start_addr as u8,
         ];
 
         spi_command(&mut self.spi, &mut self.cs, &mut cmd_buf)?;
@@ -173,11 +180,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
         for chunk in data.chunks_mut(2048).rev() {
             chunk.reverse();
             self.write_enable()?;
-            let mut cmd_buf = [
-                Opcode::LoadProgramData as u8,
-                0,
-                0
-            ];
+            let mut cmd_buf = [Opcode::LoadProgramData as u8, 0, 0];
 
             self.cs.set_low().map_err(Error::Gpio)?;
             let mut spi_result = self.spi.transfer(&mut cmd_buf);
@@ -206,22 +209,3 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
         self.erase(0, 1024)
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
