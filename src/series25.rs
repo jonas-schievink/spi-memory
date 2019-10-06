@@ -1,6 +1,6 @@
 //! Driver for 25-series SPI Flash and EEPROM chips.
 
-use crate::{utils::HexSlice, BlockDevice, Error, Read};
+use crate::{utils::{HexSlice, spi_command}, BlockDevice, Error, Read};
 use bitflags::bitflags;
 use core::convert::TryInto;
 use core::fmt;
@@ -98,19 +98,10 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         Ok(this)
     }
 
-    fn command(&mut self, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
-        // If the SPI transfer fails, make sure to disable CS anyways
-        self.cs.set_low().map_err(Error::Gpio)?;
-        let spi_result = self.spi.transfer(bytes).map_err(Error::Spi);
-        self.cs.set_high().map_err(Error::Gpio)?;
-        spi_result?;
-        Ok(())
-    }
-
     /// Reads the JEDEC manufacturer/device identification.
     pub fn read_jedec_id(&mut self) -> Result<Identification, Error<SPI, CS>> {
         let mut buf = [Opcode::ReadJedecId as u8, 0, 0, 0];
-        self.command(&mut buf)?;
+        spi_command(&mut self.spi, &mut self.cs, &mut buf)?;
 
         Ok(Identification {
             bytes: [buf[1], buf[2], buf[3]],
@@ -120,14 +111,14 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     /// Reads the status register.
     pub fn read_status(&mut self) -> Result<Status, Error<SPI, CS>> {
         let mut buf = [Opcode::ReadStatus as u8, 0];
-        self.command(&mut buf)?;
+        spi_command(&mut self.spi, &mut self.cs, &mut buf)?;
 
         Ok(Status::from_bits_truncate(buf[1]))
     }
 
     fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
         let mut cmd_buf = [Opcode::WriteEnable as u8];
-        self.command(&mut cmd_buf)?;
+        spi_command(&mut self.spi, &mut self.cs, &mut cmd_buf)?;
         Ok(())
     }
 
@@ -183,7 +174,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
                 (current_addr >> 8) as u8,
                 current_addr as u8,
             ];
-            self.command(&mut cmd_buf)?;
+            spi_command(&mut self.spi, &mut self.cs, &mut cmd_buf)?;
             self.wait_done()?;
         }
 
@@ -217,7 +208,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
     fn erase_all(&mut self) -> Result<(), Error<SPI, CS>> {
         self.write_enable()?;
         let mut cmd_buf = [Opcode::ChipErase as u8];
-        self.command(&mut cmd_buf)?;
+        spi_command(&mut self.spi, &mut self.cs, &mut cmd_buf)?;
         self.wait_done()?;
         Ok(())
     }

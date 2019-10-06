@@ -4,6 +4,7 @@ use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 use core::marker::PhantomData;
 use core::mem;
+use crate::utils::spi_command;
 
 #[allow(missing_debug_implementations)]
 pub struct Die0;
@@ -68,10 +69,7 @@ impl<DIE0, DIE1> Flash<DIE0, DIE1, Die0>
             _ => unreachable!()
         };
         let mut command = [0xC2, 0x01];
-        cs.set_low().map_err(Error::Gpio)?;
-        let spi_result = spi.transfer(&mut command).map_err(Error::Spi);
-        cs.set_high().map_err(Error::Gpio)?;
-        spi_result?;
+        spi_command(&mut spi, &mut cs, &mut command)?;
 
         Ok(Flash{
             inner: Inner::Die1(DIE1::new(spi, cs)?),
@@ -94,11 +92,7 @@ impl<DIE0, DIE1> Flash<DIE0, DIE1, Die1>
         };
 
         let mut command = [0xC2, 0x00];
-        cs.set_low().map_err(Error::Gpio)?;
-        let spi_result = spi.transfer(&mut command).map_err(Error::Spi);
-        cs.set_high().map_err(Error::Gpio)?;
-        spi_result?;
-
+        spi_command(&mut spi, &mut cs, &mut command)?;
 
         Ok(Flash{
             inner: Inner::Die0(DIE0::new(spi, cs)?),

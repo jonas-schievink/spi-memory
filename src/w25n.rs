@@ -1,5 +1,6 @@
 use crate::{BlockDevice, Error, Read};
 use crate::w25m::Stackable;
+use crate::utils::spi_command;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 use bitflags::bitflags;
@@ -59,7 +60,12 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     ///   of the flash chip. Will be driven low when accessing the device.
     pub fn init(spi: SPI, cs: CS) -> Result<Self, Error<SPI, CS>> {
         let mut this = Self { spi, cs };
-        let status = this.read_status_3()?;
+        this.setup()?;
+        Ok(this)
+    }
+    
+    fn setup(&mut self) -> Result<(), Error<SPI, CS>> {
+        let status = self.read_status_3()?;
         info!("Flash::init: status = {:?}", status);
         // Here we don't expect any writes to be in progress, and the latch must
         // also be deasserted.
@@ -68,30 +74,22 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         }
 
         // write to config register 2, set BUF=0 (continious mode) and everything else on reset
-        this.command(&mut [Opcode::WriteStatus as u8, 0xA0, 0b00000010])?;
-        this.command(&mut [Opcode::WriteStatus as u8, 0xB0, 0b00010000])?;
-        Ok(this)
-    }
-
-    fn command(&mut self, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
-        // If the SPI transfer fails, make sure to disable CS anyways
-        self.cs.set_low().map_err(Error::Gpio)?;
-        let spi_result = self.spi.transfer(bytes).map_err(Error::Spi);
-        self.cs.set_high().map_err(Error::Gpio)?;
-        spi_result?;
+        spi_command(&mut self.spi, &mut self.cs, &mut [Opcode::WriteStatus as u8, 0xA0, 0b00000010])?;
+        spi_command(&mut self.spi, &mut self.cs, &mut [Opcode::WriteStatus as u8, 0xB0, 0b00010000])?;
         Ok(())
     }
+
 
     /// Reads status register 3
     pub fn read_status_3(&mut self) -> Result<Status3, Error<SPI, CS>> {
         let mut buf = [Opcode::ReadStatus as u8, 0xC0, 0];
-        self.command(&mut buf)?;
+        spi_command(&mut self.spi, &mut self.cs, &mut buf)?;
         Ok(Status3::from_bits_truncate(buf[2]))
     }
 
     fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
         let mut cmd_buf = [Opcode::WriteEnable as u8];
-        self.command(&mut cmd_buf)?;
+        spi_command(&mut self.spi, &mut self.cs, &mut cmd_buf)?;
         Ok(())
     }
 
@@ -126,7 +124,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<SPI, CS> for Flash<SPI, CS> {
             start_addr as u8
         ];
 
-        self.command(&mut cmd_buf)?;
+        spi_command(&mut self.spi, &mut self.cs, &mut cmd_buf)?;
         self.wait_done()?;
 
         let mut cmd_buf = [
@@ -160,7 +158,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
                 (current_addr >> 8) as u8,
                 current_addr as u8,
             ];
-            self.command(&mut cmd_buf)?;
+            spi_command(&mut self.spi, &mut self.cs, &mut cmd_buf)?;
             self.wait_done()?;
         }
 
@@ -197,7 +195,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<SPI, CS> for Flash<SPI, CS> {
                 (current_addr >> 8) as u8,
                 current_addr as u8,
             ];
-            self.command(&mut cmd_buf)?;
+            spi_command(&mut self.spi, &mut self.cs, &mut cmd_buf)?;
             self.wait_done()?;
             current_addr += 1;
         }
