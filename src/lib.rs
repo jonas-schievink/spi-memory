@@ -75,7 +75,7 @@ pub trait Read<SPI: Transfer<u8>, CS: OutputPin> {
 
 /// A trait for writing and erasing operations on a memory chip.
 pub trait BlockDevice<SPI: Transfer<u8>, CS: OutputPin> {
-    /// Erases the smallest available unit from the memory chip. For Flash this should be
+    /// Erases the smallest erasable unit from the memory chip. For Flash this should be
     /// blocks or sectors, for EEPROM single bytes
     ///
     /// # Parameters
