@@ -884,8 +884,6 @@ Text Label 4350 6800 0    50   ~ 0
 CSBIT2
 Text Label 4350 6900 0    50   ~ 0
 CSBIT3
-Text Label 4350 7100 0    50   ~ 0
-~CSEN
 $Comp
 L power:+3.3V #PWR021
 U 1 1 5DB82285
@@ -912,56 +910,7 @@ Wire Wire Line
 	6000 6500 6000 6000
 Wire Wire Line
 	6000 6000 5700 6000
-Wire Wire Line
-	5700 6000 5400 6000
-Wire Wire Line
-	5400 6000 5400 6100
 Connection ~ 5700 6000
-Wire Wire Line
-	5400 6000 5300 6000
-Wire Wire Line
-	5300 6000 5300 6100
-Connection ~ 5400 6000
-Wire Wire Line
-	5300 6000 5200 6000
-Wire Wire Line
-	5200 6000 5200 6100
-Connection ~ 5300 6000
-Wire Wire Line
-	5200 6000 5100 6000
-Wire Wire Line
-	5100 6000 5100 6100
-Connection ~ 5200 6000
-Wire Wire Line
-	4350 7100 5300 7100
-Wire Wire Line
-	5450 6900 5100 6900
-Wire Wire Line
-	4350 6800 5200 6800
-Wire Wire Line
-	5450 6700 5300 6700
-Wire Wire Line
-	4350 6600 5400 6600
-Wire Wire Line
-	5400 6500 5400 6600
-Connection ~ 5400 6600
-Wire Wire Line
-	5400 6600 5450 6600
-Wire Wire Line
-	5300 6500 5300 6700
-Connection ~ 5300 6700
-Wire Wire Line
-	5300 6700 4350 6700
-Wire Wire Line
-	5200 6500 5200 6800
-Connection ~ 5200 6800
-Wire Wire Line
-	5200 6800 5450 6800
-Wire Wire Line
-	5100 6500 5100 6900
-Connection ~ 5100 6900
-Wire Wire Line
-	5100 6900 4350 6900
 Wire Wire Line
 	5450 7300 5450 8300
 Wire Wire Line
@@ -983,24 +932,14 @@ Connection ~ 6000 8300
 $Comp
 L Device:R R10
 U 1 1 5DC83C87
-P 5150 7000
-F 0 "R10" V 5150 6950 50  0000 L CNN
-F 1 "10k" V 5150 6700 50  0000 L CNN
-F 2 "Capacitor_SMD:C_0805_2012Metric_Pad1.15x1.40mm_HandSolder" V 5080 7000 50  0001 C CNN
-F 3 "~" H 5150 7000 50  0001 C CNN
-	1    5150 7000
-	0    -1   -1   0   
+P 4875 7300
+F 0 "R10" H 4925 7250 50  0000 L CNN
+F 1 "10k" H 4925 7350 50  0000 L CNN
+F 2 "Capacitor_SMD:C_0805_2012Metric_Pad1.15x1.40mm_HandSolder" V 4805 7300 50  0001 C CNN
+F 3 "~" H 4875 7300 50  0001 C CNN
+	1    4875 7300
+	1    0    0    -1  
 $EndComp
-Wire Wire Line
-	5300 7000 5300 7100
-Connection ~ 5300 7100
-Wire Wire Line
-	5300 7100 5450 7100
-Wire Wire Line
-	5000 7000 5000 6000
-Wire Wire Line
-	5000 6000 5100 6000
-Connection ~ 5100 6000
 Text Label 10500 3950 2    50   ~ 0
 CSBIT0
 Text Label 10500 3850 2    50   ~ 0
@@ -1105,17 +1044,6 @@ Wire Wire Line
 	13250 2750 13550 2750
 Wire Wire Line
 	13250 2150 13550 2150
-$Comp
-L Device:R_Pack04 RN1
-U 1 1 5DBC682D
-P 5300 6300
-F 0 "RN1" H 5450 6350 50  0000 L CNN
-F 1 "10k" H 5450 6250 50  0000 L CNN
-F 2 "Resistor_SMD:R_Array_Convex_4x0603" V 5575 6300 50  0001 C CNN
-F 3 "~" H 5300 6300 50  0001 C CNN
-	1    5300 6300
-	1    0    0    -1  
-$EndComp
 $Sheet
 S 8650 6500 700  400 
 U 5E08F0E6
@@ -2074,4 +2002,115 @@ Wire Wire Line
 	6550 7900 7100 7900
 Text Notes 7150 7900 0    25   ~ 0
 FIXME: CS13 is wrongly marked as\nan input to the decoder, so I placed\na power flag to keep DRC quiet.
+Wire Wire Line
+	4350 6600 5450 6600
+$Comp
+L Device:R R17
+U 1 1 5DA89E23
+P 5450 6300
+F 0 "R17" H 5500 6350 50  0000 L CNN
+F 1 "10k" H 5500 6250 50  0000 L CNN
+F 2 "Capacitor_SMD:C_0805_2012Metric_Pad1.15x1.40mm_HandSolder" V 5380 6300 50  0001 C CNN
+F 3 "~" H 5450 6300 50  0001 C CNN
+	1    5450 6300
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	5450 6450 5450 6600
+Connection ~ 5450 6600
+Wire Wire Line
+	5450 6150 5450 6000
+Connection ~ 5450 6000
+Wire Wire Line
+	5450 6000 5700 6000
+Wire Wire Line
+	4350 6800 4950 6800
+Wire Wire Line
+	4350 6900 4700 6900
+$Comp
+L Device:R R16
+U 1 1 5DADFCBE
+P 5200 6300
+F 0 "R16" H 5250 6350 50  0000 L CNN
+F 1 "10k" H 5250 6250 50  0000 L CNN
+F 2 "Capacitor_SMD:C_0805_2012Metric_Pad1.15x1.40mm_HandSolder" V 5130 6300 50  0001 C CNN
+F 3 "~" H 5200 6300 50  0001 C CNN
+	1    5200 6300
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	4350 6700 5200 6700
+Wire Wire Line
+	5200 6450 5200 6700
+Connection ~ 5200 6700
+Wire Wire Line
+	5200 6700 5450 6700
+Wire Wire Line
+	5200 6150 5200 6000
+Connection ~ 5200 6000
+Wire Wire Line
+	5200 6000 5450 6000
+Text Label 4350 7450 0    50   ~ 0
+~CSEN
+Wire Wire Line
+	5175 7100 5450 7100
+$Comp
+L power:+3.3V #PWR025
+U 1 1 5DBC7191
+P 4875 7150
+F 0 "#PWR025" H 4875 7000 50  0001 C CNN
+F 1 "+3.3V" H 4875 7300 50  0000 C CNN
+F 2 "" H 4875 7150 50  0001 C CNN
+F 3 "" H 4875 7150 50  0001 C CNN
+	1    4875 7150
+	1    0    0    -1  
+$EndComp
+$Comp
+L Device:R R13
+U 1 1 5DC03440
+P 4950 6300
+F 0 "R13" H 5000 6350 50  0000 L CNN
+F 1 "10k" H 5000 6250 50  0000 L CNN
+F 2 "Capacitor_SMD:C_0805_2012Metric_Pad1.15x1.40mm_HandSolder" V 4880 6300 50  0001 C CNN
+F 3 "~" H 4950 6300 50  0001 C CNN
+	1    4950 6300
+	1    0    0    -1  
+$EndComp
+$Comp
+L Device:R R12
+U 1 1 5DC204B4
+P 4700 6300
+F 0 "R12" H 4750 6350 50  0000 L CNN
+F 1 "10k" H 4750 6250 50  0000 L CNN
+F 2 "Capacitor_SMD:C_0805_2012Metric_Pad1.15x1.40mm_HandSolder" V 4630 6300 50  0001 C CNN
+F 3 "~" H 4700 6300 50  0001 C CNN
+	1    4700 6300
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	4950 6450 4950 6800
+Connection ~ 4950 6800
+Wire Wire Line
+	4950 6800 5450 6800
+Wire Wire Line
+	4950 6000 4950 6150
+Wire Wire Line
+	4950 6000 5200 6000
+Wire Wire Line
+	4950 6000 4700 6000
+Wire Wire Line
+	4700 6000 4700 6150
+Connection ~ 4950 6000
+Wire Wire Line
+	4700 6450 4700 6900
+Connection ~ 4700 6900
+Wire Wire Line
+	4700 6900 5450 6900
+Wire Wire Line
+	5175 7100 5175 7450
+Wire Wire Line
+	4875 7450 5175 7450
+Wire Wire Line
+	4350 7450 4875 7450
+Connection ~ 4875 7450
 $EndSCHEMATC
