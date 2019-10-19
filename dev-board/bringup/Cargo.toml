@@ -6,4 +6,5 @@ edition = "2018"
 description = "Interactive development board bringup assistant"
 
 [dependencies]
-mcp2210 = "0.1.0"
+#mcp2210 = "0.1.0"
+mcp2210 = { path = "../../../mcp2210-rs" }
