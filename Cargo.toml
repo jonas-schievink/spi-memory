@@ -12,7 +12,7 @@ readme = "README.md"
 license = "0BSD"
 
 [workspace]
-members = ["dev-board/bringup"]
+members = ["dev-board", "dev-board/bringup"]
 
 # cargo-release configuration
 [package.metadata.release]

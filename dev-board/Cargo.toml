@@ -1,11 +1,14 @@
 [package]
-name = "bringup"
+name = "dev-board"
 version = "0.1.0"
 authors = ["Jonas Schievink <jonasschievink@gmail.com>"]
 edition = "2018"
-description = "Interactive development board bringup assistant"
 publish = false
+description = "Dev-Board support crate"
 
 [dependencies]
 mcp2210 = "0.1.0"
-dev-board = { path = ".." }
+embedded-hal = "0.2.3"
+log = "0.4.8"
+spi-memory = { path = ".." }
+bitflags = "1.2.1"

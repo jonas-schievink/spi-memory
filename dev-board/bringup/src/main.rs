@@ -28,29 +28,6 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-const SAFE_CHIP_SETTINGS: ChipSettings = ChipSettings {
-    // CSBIT0-3 are GPIOs
-    gp0_mode: PinMode::Gpio,
-    gp1_mode: PinMode::Gpio,
-    gp2_mode: PinMode::Gpio,
-    gp3_mode: PinMode::Gpio,
-    // \CSEN
-    gp4_mode: PinMode::ChipSelect,
-    // CHIP_PWR
-    gp5_mode: PinMode::Gpio,
-    gp6_mode: PinMode::Gpio,
-    // SPI_REL_ACK
-    gp7_mode: PinMode::Dedicated,
-    // \SPI_RELEASE
-    gp8_mode: PinMode::Dedicated,
-    default_gpio_value: GpioValue::ALL_LOW,
-    default_gpio_direction: GpioDirection::ALL_INPUTS,
-    remote_wakeup: false,
-    interrupt_mode: InterruptMode::None,
-    bus_release: true,
-    nvram_access_control: NvramAccessControl::None,
-};
-
 struct Step {
     name: &'static str,
     notes: &'static str,
@@ -383,7 +360,7 @@ fn configure_nvram(mcp: &mut Mcp2210) -> Result<()> {
     .show();
 
     let old_chip_settings = mcp.get_nvram_chip_settings()?;
-    let new_chip_settings = SAFE_CHIP_SETTINGS;
+    let new_chip_settings = dev_board::SAFE_CHIP_SETTINGS;
 
     println!("Old NVRAM Chip Settings: {:?}", old_chip_settings);
     println!("New NVRAM Chip Settings: {:?}", new_chip_settings);
@@ -408,6 +385,7 @@ fn verify_nvram(mcp: &mut Mcp2210) -> Result<()> {
     while !mcp.get_chip_status().is_err() {
         thread::sleep(Duration::from_millis(200));
     }
+    thread::sleep(Duration::from_millis(400));
     println!("Board unplugged, waiting for reconnection...");
 
     let devices = loop {
@@ -440,23 +418,7 @@ fn verify_nvram(mcp: &mut Mcp2210) -> Result<()> {
     println!("Successfully opened '{}'", devices[0].display());
     mem::replace(mcp, new_mcp);
 
-    let chip_settings = mcp.get_nvram_chip_settings()?;
-    if chip_settings != SAFE_CHIP_SETTINGS {
-        return Err(format!(
-            "NVRAM chip settings were not set correctly. Expected: {:?}; Got: {:?}",
-            SAFE_CHIP_SETTINGS, chip_settings
-        )
-        .into());
-    }
-
-    let chip_settings = mcp.get_chip_settings()?;
-    if chip_settings != SAFE_CHIP_SETTINGS {
-        return Err(format!(
-            "Active chip settings were not set to NVRAM settings. Expected: {:?}; Got: {:?}",
-            SAFE_CHIP_SETTINGS, chip_settings
-        )
-        .into());
-    }
+    dev_board::verify_mcp_nvram(mcp)?;
 
     println!("Verification successful!");
 
