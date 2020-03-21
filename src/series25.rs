@@ -9,12 +9,55 @@ use embedded_hal::digital::v2::OutputPin;
 
 /// 3-Byte JEDEC manufacturer and device identification.
 pub struct Identification {
-    /// The received bytes, in order.
-    ///
-    /// First 1 or 2 Bytes are the JEDEC manufacturer ID, last 1-2 Bytes are the
-    /// device ID. How many bytes are used depends on manufacturer's place in
-    /// the JEDEC list, I guess.
+    /// Data collected
+    /// - First byte is the manufacturer's ID code from eg JEDEC Publication No. 106AJ
+    /// - The trailing bytes are a manufacturer-specific device ID.
     bytes: [u8; 3],
+
+    /// The number of continuations that precede the main manufacturer ID
+    continuations: u8,
+}
+
+impl Identification {
+    /// The JEDEC manufacturer code for this chip
+    pub fn mfr_code(&self) -> u8 {
+        self.bytes[0]
+    }
+
+    /// The manufacturer-specific device ID for this chip
+    pub fn device_id(&self) -> &[u8] {
+        self.bytes[1..].as_ref()
+    }
+
+    /// Count of continuation codes in this chip id.
+    /// For example the ARM Ltd identifier is:
+    /// 7F 7F 7F 7F 3B (5 bytes)
+    /// so the continuation count is 4.
+    pub fn continuation_count(&self) -> u8 {
+        self.continuations
+    }
+
+    /// Build an Identification from JEDEC ID bytes
+    pub fn from_jedec_id(buf: &[u8]) -> Identification {
+        // Example response for Cypress part FM25V02A:
+        // 7F 7F 7F 7F 7F 7F C2 22 08  (9 bytes)
+        // 0x7F is a "continuation code", not part of the core manufacturer ID
+        // 0xC2 is the company identifier for Cypress (Ramtron)
+
+        // Find the end of the continuation bytes (0x7F)
+        let mut start_idx = 0;
+        for i in 0..(buf.len() - 2) {
+            if buf[i] != 0x7F {
+                start_idx = i;
+                break;
+            }
+        }
+
+        Self {
+            bytes: [buf[start_idx], buf[start_idx + 1], buf[start_idx + 2]],
+            continuations: start_idx as u8,
+        }
+    }
 }
 
 impl fmt::Debug for Identification {
@@ -31,7 +74,7 @@ enum Opcode {
     ReadDeviceId = 0xAB,
     /// Read the 8-bit manufacturer and device IDs.
     ReadMfDId = 0x90,
-    /// Read the 16-bit manufacturer ID and 8-bit device ID.
+    /// Read 16-bit manufacturer ID and 8-bit device ID.
     ReadJedecId = 0x9F,
     /// Set the write enable latch.
     WriteEnable = 0x06,
@@ -109,12 +152,13 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
 
     /// Reads the JEDEC manufacturer/device identification.
     pub fn read_jedec_id(&mut self) -> Result<Identification, Error<SPI, CS>> {
-        let mut buf = [Opcode::ReadJedecId as u8, 0, 0, 0];
+        // Optimistically read 12 bytes, even though some identifiers will be shorter
+        let mut buf: [u8; 12] = [0; 12];
+        buf[0] = Opcode::ReadJedecId as u8;
         self.command(&mut buf)?;
 
-        Ok(Identification {
-            bytes: [buf[1], buf[2], buf[3]],
-        })
+        // Skip buf[0] (SPI read response byte)
+        Ok(Identification::from_jedec_id(&buf[1..]))
     }
 
     /// Reads the status register.
@@ -222,3 +266,24 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
         Ok(())
     }
 }
+
+// TODO reintroduce test
+// Manually ran this test by tweaking [dev-dependencies] and config;
+// however, until we can specify separate dependencies for
+// tests and examples, this will not be runnable in automation.
+//
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//
+//     #[test]
+//     fn test_decode_jedec_id() {
+//         let cypress_id_bytes = [0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0xC2, 0x22, 0x08];
+//         let ident = Identification::from_jedec_id(&cypress_id_bytes);
+//         assert_eq!(0xC2, ident.mfr_code());
+//         assert_eq!(6,ident.continuation_count());
+//         let device_id = ident.device_id();
+//         assert_eq!(device_id[0], 0x22);
+//         assert_eq!(device_id[1], 0x08);
+//     }
+// }
