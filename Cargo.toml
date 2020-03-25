@@ -45,7 +45,7 @@ bitflags = "1.0.4"
 cortex-m = "0.6.0"
 cortex-m-rt = "0.6.8"
 cortex-m-semihosting = "0.3.3"
-stm32f4xx-hal = { version = "0.5.0", features = ["stm32f401"] }
+stm32f4xx-hal = { version = "0.7.0", features = ["stm32f401"] }
 panic-semihosting = "0.5.2"
 
 [profile.dev]
