@@ -41,20 +41,20 @@ impl Identification {
         }
     }
 
-    /// The JEDEC manufacturer code for this chip
+    /// The JEDEC manufacturer code for this chip.
     pub fn mfr_code(&self) -> u8 {
         self.bytes[0]
     }
 
-    /// The manufacturer-specific device ID for this chip
+    /// The manufacturer-specific device ID for this chip.
     pub fn device_id(&self) -> &[u8] {
         self.bytes[1..].as_ref()
     }
 
-    /// Count of continuation codes in this chip id.
-    /// For example the ARM Ltd identifier is:
-    /// 7F 7F 7F 7F 3B (5 bytes)
-    /// so the continuation count is 4.
+    /// Number of continuation codes in this chip ID.
+    ///
+    /// For example the ARM Ltd identifier is `7F 7F 7F 7F 3B` (5 bytes), so
+    /// the continuation count is 4.
     pub fn continuation_count(&self) -> u8 {
         self.continuations
     }
