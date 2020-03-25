@@ -267,23 +267,18 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
     }
 }
 
-// TODO reintroduce test
-// Manually ran this test by tweaking [dev-dependencies] and config;
-// however, until we can specify separate dependencies for
-// tests and examples, this will not be runnable in automation.
-//
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     #[test]
-//     fn test_decode_jedec_id() {
-//         let cypress_id_bytes = [0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0xC2, 0x22, 0x08];
-//         let ident = Identification::from_jedec_id(&cypress_id_bytes);
-//         assert_eq!(0xC2, ident.mfr_code());
-//         assert_eq!(6,ident.continuation_count());
-//         let device_id = ident.device_id();
-//         assert_eq!(device_id[0], 0x22);
-//         assert_eq!(device_id[1], 0x08);
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_jedec_id() {
+        let cypress_id_bytes = [0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0xC2, 0x22, 0x08];
+        let ident = Identification::from_jedec_id(&cypress_id_bytes);
+        assert_eq!(0xC2, ident.mfr_code());
+        assert_eq!(6, ident.continuation_count());
+        let device_id = ident.device_id();
+        assert_eq!(device_id[0], 0x22);
+        assert_eq!(device_id[1], 0x08);
+    }
+}
