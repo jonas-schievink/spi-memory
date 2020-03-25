@@ -1,6 +1,6 @@
 [package]
 name = "spi-memory"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Jonas Schievink <jonasschievink@gmail.com>", "Henrik Böving <hargonix@gmail.com>"]
 edition = "2018"
 description = "A generic driver for different SPI Flash and EEPROM chips"

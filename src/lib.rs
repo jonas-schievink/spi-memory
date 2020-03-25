@@ -5,7 +5,7 @@
 //! erasing as well as other chip families (eg. 24-series chips) is planned.
 //! Contributions are always welcome!
 
-#![doc(html_root_url = "https://docs.rs/spi-memory/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/spi-memory/0.2.0")]
 #![warn(missing_debug_implementations, rust_2018_idioms)]
 #![cfg_attr(not(test), no_std)]
 
