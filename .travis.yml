@@ -19,6 +19,7 @@ install:
 script:
   - cargo build --all --examples --target $TARGET_BUILD $FEATURES
   - cargo build --all --examples --target $TARGET_BUILD --release $FEATURES
+  - cargo test -p spi-memory --lib
 notifications:
   email:
     on_success: never
