@@ -1,9 +1,12 @@
-//! An `embedded-hal`-based SPI-Flash chip driver.
+//! An [`embedded-hal`]-based SPI-Flash chip driver.
 //!
 //! This crate aims to be compatible with common families of SPI flash chips.
-//! Currently, reading 25-series chips is supported, and support for writing and
-//! erasing as well as other chip families (eg. 24-series chips) is planned.
-//! Contributions are always welcome!
+//! Currently, reading, writing, erasing 25-series chips is supported, and
+//! support for other chip families (eg. 24-series chips) is planned.
+//!
+//! Contributions are welcome!
+//!
+//! [`embedded-hal`]: https://docs.rs/embedded-hal/
 
 #![doc(html_root_url = "https://docs.rs/spi-memory/0.2.0")]
 #![warn(missing_debug_implementations, rust_2018_idioms)]
