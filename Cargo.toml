@@ -11,6 +11,10 @@ categories = ["embedded"]
 readme = "README.md"
 license = "0BSD"
 
+[features]
+util = [ "linux-embedded-hal", "structopt", "log", "simplelog", "hex", "ihex" ]
+default = []
+
 # cargo-release configuration
 [package.metadata.release]
 tag-message = "{{version}}"
@@ -38,8 +42,13 @@ replace = "https://docs.rs/spi-memory/{{version}}"
 
 [dependencies]
 embedded-hal = "0.2.3"
-log = { version = "0.4.6", optional = true }
+log = { version = "0.4.8", optional = true }
 bitflags = "1.0.4"
+linux-embedded-hal = { version = "0.3.0", optional = true }
+structopt = { version = "0.3.15", optional = true }
+simplelog = { version = "0.8.0", optional = true }
+hex = { version = "0.4.2", optional = true }
+ihex = { version = "3.0.0", optional = true }
 
 [dev-dependencies]
 cortex-m = "0.6.0"
@@ -47,6 +56,11 @@ cortex-m-rt = "0.6.8"
 cortex-m-semihosting = "0.3.3"
 stm32f4xx-hal = { version = "0.7.0", features = ["stm32f401"] }
 panic-semihosting = "0.5.2"
+
+[[bin]]
+name = "spimem-util"
+path = "src/util.rs"
+required-features = [ "util" ]
 
 [profile.dev]
 opt-level = "z"
