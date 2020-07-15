@@ -11,6 +11,11 @@ categories = ["embedded"]
 readme = "README.md"
 license = "0BSD"
 
+[features]
+# Microchip 25LCxxx series chip extras
+25lc = []
+default = []
+
 # cargo-release configuration
 [package.metadata.release]
 tag-message = "{{version}}"

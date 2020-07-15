@@ -8,6 +8,7 @@ use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 
 /// 3-Byte JEDEC manufacturer and device identification.
+#[cfg(not(feature = "25lc"))]
 pub struct Identification {
     /// Data collected
     /// - First byte is the manufacturer's ID code from eg JEDEC Publication No. 106AJ
@@ -18,6 +19,7 @@ pub struct Identification {
     continuations: u8,
 }
 
+#[cfg(not(feature = "25lc"))]
 impl Identification {
     /// Build an Identification from JEDEC ID bytes.
     pub fn from_jedec_id(buf: &[u8]) -> Identification {
@@ -60,6 +62,7 @@ impl Identification {
     }
 }
 
+#[cfg(not(feature = "25lc"))]
 impl fmt::Debug for Identification {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("Identification")
@@ -75,6 +78,7 @@ enum Opcode {
     /// Read the 8-bit manufacturer and device IDs.
     ReadMfDId = 0x90,
     /// Read 16-bit manufacturer ID and 8-bit device ID.
+    #[cfg(not(feature = "25lc"))]
     ReadJedecId = 0x9F,
     /// Set the write enable latch.
     WriteEnable = 0x06,
@@ -86,9 +90,14 @@ enum Opcode {
     WriteStatus = 0x01,
     Read = 0x03,
     PageProg = 0x02, // directly writes to EEPROMs too
+    #[cfg(not(feature = "25lc"))]
     SectorErase = 0x20,
+    #[cfg(feature = "25lc")]
+    SectorErase = 0x42,
     BlockErase = 0xD8,
     ChipErase = 0xC7,
+    #[cfg(feature = "25lc")]
+    DeepSleep = 0xBF,
 }
 
 bitflags! {
@@ -116,6 +125,7 @@ bitflags! {
 pub struct Flash<SPI: Transfer<u8>, CS: OutputPin> {
     spi: SPI,
     cs: CS,
+    page_size: u16
 }
 
 impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
@@ -128,7 +138,20 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     /// * **`cs`**: The **C**hip-**S**elect Pin connected to the `\CS`/`\CE` pin
     ///   of the flash chip. Will be driven low when accessing the device.
     pub fn init(spi: SPI, cs: CS) -> Result<Self, Error<SPI, CS>> {
-        let mut this = Self { spi, cs };
+        Flash::init_with_page_size(spi, cs, 256)
+    }
+
+    /// Creates a new 25-series flash driver.
+    ///
+    /// # Parameters
+    ///
+    /// * **`spi`**: An SPI master. Must be configured to operate in the correct
+    ///   mode for the device.
+    /// * **`cs`**: The **C**hip-**S**elect Pin connected to the `\CS`/`\CE` pin
+    ///   of the flash chip. Will be driven low when accessing the device.
+    /// * **`page_size`**: Page size of the chip
+    pub fn init_with_page_size(spi: SPI, cs: CS, page_size: u16) -> Result<Self, Error<SPI, CS>> {
+        let mut this = Self { spi, cs, page_size };
         let status = this.read_status()?;
         info!("Flash::init: status = {:?}", status);
 
@@ -137,7 +160,6 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         if !(status & (Status::BUSY | Status::WEL)).is_empty() {
             return Err(Error::UnexpectedStatus);
         }
-
         Ok(this)
     }
 
@@ -151,6 +173,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     }
 
     /// Reads the JEDEC manufacturer/device identification.
+    #[cfg(not(feature = "25lc"))]
     pub fn read_jedec_id(&mut self) -> Result<Identification, Error<SPI, CS>> {
         // Optimistically read 12 bytes, even though some identifiers will be shorter
         let mut buf: [u8; 12] = [0; 12];
@@ -171,14 +194,35 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
 
     fn write_enable(&mut self) -> Result<(), Error<SPI, CS>> {
         let mut cmd_buf = [Opcode::WriteEnable as u8];
-        self.command(&mut cmd_buf)?;
-        Ok(())
+        self.command(&mut cmd_buf)
     }
 
     fn wait_done(&mut self) -> Result<(), Error<SPI, CS>> {
         // TODO: Consider changing this to a delay based pattern
         while self.read_status()?.contains(Status::BUSY) {}
         Ok(())
+    }
+
+    pub fn set_write_protection(&mut self, protection: u8) -> Result<(), Error<SPI, CS>> {
+        let protection = protection & 0b0111;
+        let status = self.read_status()?;
+        let status = (status.bits & 0b1_1100) | protection;
+        let mut buf = [Opcode::WriteStatus as u8, status];
+        self.command(&mut buf)
+    }
+
+    #[cfg(feature = "25lc")]
+    pub fn deep_sleep(&mut self) -> Result<(), Error<SPI, CS>> {
+        let mut cmd_buf = [Opcode::DeepSleep as u8];
+        self.command(&mut cmd_buf)
+    }
+
+    #[cfg(feature = "25lc")]
+    pub fn wake_up_and_get_manufacturer_id(&mut self) -> Result<u8, Error<SPI, CS>> {
+        // <Instruction byte><Dummy address 3 bytes><Manufacturer ID byte>
+        let mut cmd_buf = [Opcode::ReadDeviceId as u8, 0, 0, 0];
+        self.command(&mut cmd_buf)?;
+        Ok(cmd_buf[3])
     }
 }
 
@@ -220,7 +264,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
         for c in 0..amount {
             self.write_enable()?;
 
-            let current_addr: u32 = (addr as usize + c * 256).try_into().unwrap();
+            let current_addr: u32 = (addr as usize + c * self.page_size).try_into().unwrap();
             let mut cmd_buf = [
                 Opcode::SectorErase as u8,
                 (current_addr >> 16) as u8,
@@ -238,7 +282,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
         for (c, chunk) in data.chunks_mut(256).enumerate() {
             self.write_enable()?;
 
-            let current_addr: u32 = (addr as usize + c * 256).try_into().unwrap();
+            let current_addr: u32 = (addr as usize + c * self.page_size).try_into().unwrap();
             let mut cmd_buf = [
                 Opcode::PageProg as u8,
                 (current_addr >> 16) as u8,
@@ -272,6 +316,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(feature = "25lc"))]
     fn test_decode_jedec_id() {
         let cypress_id_bytes = [0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0xC2, 0x22, 0x08];
         let ident = Identification::from_jedec_id(&cypress_id_bytes);
