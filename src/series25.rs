@@ -220,7 +220,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     #[cfg(feature = "25lc")]
     pub fn wake_up_and_get_manufacturer_id(&mut self) -> Result<u8, Error<SPI, CS>> {
         // <Instruction byte><Dummy address 3 bytes><Manufacturer ID byte>
-        let mut cmd_buf = [Opcode::ReadDeviceId as u8, 0, 0, 0];
+        let mut cmd_buf = [Opcode::ReadDeviceId as u8, 0, 0, 0, 0];
         self.command(&mut cmd_buf)?;
         Ok(cmd_buf[3])
     }
