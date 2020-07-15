@@ -1,8 +1,10 @@
 //! Driver for 25-series SPI Flash and EEPROM chips.
-
-use crate::{utils::HexSlice, BlockDevice, Error, Read};
+#[cfg(not(feature = "25lc"))]
+use crate::utils::HexSlice;
+use crate::{BlockDevice, Error, Read};
 use bitflags::bitflags;
 use core::convert::TryInto;
+#[cfg(not(feature = "25lc"))]
 use core::fmt;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
