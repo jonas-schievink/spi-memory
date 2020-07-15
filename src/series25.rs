@@ -125,7 +125,7 @@ bitflags! {
 pub struct Flash<SPI: Transfer<u8>, CS: OutputPin> {
     spi: SPI,
     cs: CS,
-    page_size: u16
+    page_size: usize
 }
 
 impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
@@ -150,7 +150,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     /// * **`cs`**: The **C**hip-**S**elect Pin connected to the `\CS`/`\CE` pin
     ///   of the flash chip. Will be driven low when accessing the device.
     /// * **`page_size`**: Page size of the chip
-    pub fn init_with_page_size(spi: SPI, cs: CS, page_size: u16) -> Result<Self, Error<SPI, CS>> {
+    pub fn init_with_page_size(spi: SPI, cs: CS, page_size: usize) -> Result<Self, Error<SPI, CS>> {
         let mut this = Self { spi, cs, page_size };
         let status = this.read_status()?;
         info!("Flash::init: status = {:?}", status);
