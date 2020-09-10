@@ -11,6 +11,7 @@ mod private {
 ///
 /// This can encapsulate an SPI or GPIO error, and adds its own protocol errors
 /// on top of that.
+#[non_exhaustive]
 pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
     /// An SPI transfer failed.
     Spi(SPI::Error),
@@ -24,9 +25,6 @@ pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
     /// driver wasn't constructed or destructed properly (eg. while there is
     /// still a write in progress).
     UnexpectedStatus,
-
-    #[doc(hidden)]
-    __NonExhaustive(private::Private),
 }
 
 impl<SPI: Transfer<u8>, GPIO: OutputPin> Debug for Error<SPI, GPIO>
@@ -39,7 +37,6 @@ where
             Error::Spi(spi) => write!(f, "Error::Spi({:?})", spi),
             Error::Gpio(gpio) => write!(f, "Error::Gpio({:?})", gpio),
             Error::UnexpectedStatus => f.write_str("Error::UnexpectedStatus"),
-            Error::__NonExhaustive(_) => unreachable!(),
         }
     }
 }
@@ -54,7 +51,6 @@ where
             Error::Spi(spi) => write!(f, "SPI error: {}", spi),
             Error::Gpio(gpio) => write!(f, "GPIO error: {}", gpio),
             Error::UnexpectedStatus => f.write_str("unexpected value in status register"),
-            Error::__NonExhaustive(_) => unreachable!(),
         }
     }
 }

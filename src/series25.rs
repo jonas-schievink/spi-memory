@@ -1,11 +1,22 @@
 //! Driver for 25-series SPI Flash and EEPROM chips.
 
-use crate::{utils::HexSlice, BlockDevice, Error, Read};
+// use crate::{utils::HexSlice, BlockDevice, Error, Read};
+use crate::{utils::HexSlice, Error};
 use bitflags::bitflags;
 use core::convert::TryInto;
 use core::fmt;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
+
+/// Ready state.
+#[derive(Debug)]
+pub struct Ready {}
+
+/// Busy state.
+#[derive(Debug)]
+pub struct Busy {
+    done: bool,
+}
 
 /// 3-Byte JEDEC manufacturer and device identification.
 pub struct Identification {
@@ -112,13 +123,15 @@ bitflags! {
 /// * **`SPI`**: The SPI master to which the flash chip is attached.
 /// * **`CS`**: The **C**hip-**S**elect line attached to the `\CS`/`\CE` pin of
 ///   the flash chip.
+/// * **`STATE`**: The type-state of the driver.
 #[derive(Debug)]
-pub struct Flash<SPI: Transfer<u8>, CS: OutputPin> {
+pub struct Flash<SPI: Transfer<u8>, CS: OutputPin, STATE> {
     spi: SPI,
     cs: CS,
+    state: STATE,
 }
 
-impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
+impl<SPI: Transfer<u8>, CS: OutputPin, STATE> Flash<SPI, CS, STATE> {
     /// Creates a new 25-series flash driver.
     ///
     /// # Parameters
@@ -127,8 +140,12 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
     ///   mode for the device.
     /// * **`cs`**: The **C**hip-**S**elect Pin connected to the `\CS`/`\CE` pin
     ///   of the flash chip. Will be driven low when accessing the device.
-    pub fn init(spi: SPI, cs: CS) -> Result<Self, Error<SPI, CS>> {
-        let mut this = Self { spi, cs };
+    pub fn init(spi: SPI, cs: CS) -> Result<Flash<SPI, CS, Ready>, Error<SPI, CS>> {
+        let mut this = Flash {
+            spi,
+            cs,
+            state: Ready {},
+        };
         let status = this.read_status()?;
         info!("Flash::init: status = {:?}", status);
 
@@ -174,15 +191,38 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         self.command(&mut cmd_buf)?;
         Ok(())
     }
+}
 
-    fn wait_done(&mut self) -> Result<(), Error<SPI, CS>> {
+use core::task::Poll;
+
+impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS, Busy> {
+    pub fn wait(&mut self) -> Poll<Result<(), Error<SPI, CS>>> {
         // TODO: Consider changing this to a delay based pattern
-        while self.read_status()?.contains(Status::BUSY) {}
-        Ok(())
+        let status = self.read_status();
+
+        if let Ok(status) = status {
+            if status.contains(Status::BUSY) {
+                return Poll::Pending;
+            }
+        }
+
+        self.state.done = true;
+
+        Poll::Ready(Ok(()))
+    }
+
+    pub fn finish_waiting(self) -> Flash<SPI, CS, Ready> {
+        assert!(self.state.done);
+
+        Flash {
+            spi: self.spi,
+            cs: self.cs,
+            state: Ready {},
+        }
     }
 }
 
-impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS> {
+impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS, Ready> {
     /// Reads flash contents into `buf`, starting at `addr`.
     ///
     /// Note that `addr` is not fully decoded: Flash chips will typically only
@@ -195,7 +235,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS> {
     ///
     /// * `addr`: 24-bit address to start reading at.
     /// * `buf`: Destination buffer to fill.
-    fn read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), Error<SPI, CS>> {
         // TODO what happens if `buf` is empty?
 
         let mut cmd_buf = [
@@ -213,10 +253,17 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<SPI, CS> {
         self.cs.set_high().map_err(Error::Gpio)?;
         spi_result.map(|_| ()).map_err(Error::Spi)
     }
-}
 
-impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, CS> {
-    fn erase_sectors(&mut self, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
+    /// Erases sectors from the memory chip.
+    ///
+    /// # Parameters
+    /// * `addr`: The address to start erasing at. If the address is not on a sector boundary,
+    ///   the lower bits can be ignored in order to make it fit.
+    pub fn erase_sectors(
+        mut self,
+        addr: u32,
+        amount: usize,
+    ) -> Result<Flash<SPI, CS, Busy>, Error<SPI, CS>> {
         for c in 0..amount {
             self.write_enable()?;
 
@@ -228,13 +275,24 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
                 current_addr as u8,
             ];
             self.command(&mut cmd_buf)?;
-            self.wait_done()?;
         }
 
-        Ok(())
+        Ok(Flash {
+            spi: self.spi,
+            cs: self.cs,
+            state: Busy { done: false },
+        })
     }
 
-    fn write_bytes(&mut self, addr: u32, data: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    /// Erases the memory chip fully.
+    ///
+    /// Warning: Full erase operations can take a significant amount of time.
+    /// Check your device's datasheet for precise numbers.
+    pub fn write_bytes(
+        mut self,
+        addr: u32,
+        data: &mut [u8],
+    ) -> Result<Flash<SPI, CS, Busy>, Error<SPI, CS>> {
         for (c, chunk) in data.chunks_mut(256).enumerate() {
             self.write_enable()?;
 
@@ -253,17 +311,31 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<SPI, 
             }
             self.cs.set_high().map_err(Error::Gpio)?;
             spi_result.map(|_| ()).map_err(Error::Spi)?;
-            self.wait_done()?;
         }
-        Ok(())
+
+        Ok(Flash {
+            spi: self.spi,
+            cs: self.cs,
+            state: Busy { done: false },
+        })
     }
 
-    fn erase_all(&mut self) -> Result<(), Error<SPI, CS>> {
+    /// Writes bytes onto the memory chip. This method is supposed to assume that the sectors
+    /// it is writing to have already been erased and should not do any erasing themselves.
+    ///
+    /// # Parameters
+    /// * `addr`: The address to write to.
+    /// * `data`: The bytes to write to `addr`.
+    pub fn erase_all(mut self) -> Result<Flash<SPI, CS, Busy>, Error<SPI, CS>> {
         self.write_enable()?;
         let mut cmd_buf = [Opcode::ChipErase as u8];
         self.command(&mut cmd_buf)?;
-        self.wait_done()?;
-        Ok(())
+
+        Ok(Flash {
+            spi: self.spi,
+            cs: self.cs,
+            state: Busy { done: false },
+        })
     }
 }
 
