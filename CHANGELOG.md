@@ -3,6 +3,7 @@
 ## Unreleased
 
 * Implement `Display` for `Error`
+* Make BlockDevice depend on embedded_hal's Write<u8> and make write_bytes buffer reference non-mutable
 
 ## 0.2.0 - 2020-03-25
 
