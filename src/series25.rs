@@ -4,6 +4,7 @@ use crate::{utils::HexSlice, BlockDevice, Error, Read};
 use bitflags::bitflags;
 use core::convert::TryInto;
 use core::fmt;
+use embedded_hal::blocking::delay::DelayUs;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::blocking::spi::Write;
 use embedded_hal::digital::v2::OutputPin;
@@ -89,6 +90,7 @@ enum Opcode {
     PageProg = 0x02, // directly writes to EEPROMs too
     SectorErase = 0x20,
     BlockErase = 0xD8,
+    DeepPowerDown = 0xB9,
     ChipErase = 0xC7,
 }
 
@@ -168,6 +170,34 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         self.command(&mut buf)?;
 
         Ok(Status::from_bits_truncate(buf[1]))
+    }
+
+    pub fn deep_power_down<D: DelayUs<u8>>(
+        &mut self,
+        timer: Option<&mut D>,
+    ) -> Result<(), Error<SPI::Error, CS>> {
+        let mut buf = [Opcode::DeepPowerDown as u8];
+        self.command(&mut buf)?;
+
+        if let Some(timer) = timer {
+            // Wait for low power mode to be entered
+            timer.delay_us(10);
+        }
+
+        Ok(())
+    }
+
+    pub fn wake_up<D: DelayUs<u8>>(&mut self, timer: &mut D) -> Result<(), Error<SPI::Error, CS>> {
+        // Wait minimum time required to be in low power mode before waking up again (t_DPDD)
+        timer.delay_us(30);
+        // Pull CS down for at least t_CRCP (20ns)
+        self.cs.set_low().map_err(Error::Gpio)?;
+        timer.delay_us(1);
+        self.cs.set_high().map_err(Error::Gpio)?;
+        // Wait for the recovery time
+        timer.delay_us(35);
+
+        Ok(())
     }
 
     fn write_enable(&mut self) -> Result<(), Error<SPI::Error, CS>> {
