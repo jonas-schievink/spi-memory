@@ -1,5 +1,4 @@
 use core::fmt::{self, Debug, Display};
-use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 
 mod private {
@@ -11,9 +10,9 @@ mod private {
 ///
 /// This can encapsulate an SPI or GPIO error, and adds its own protocol errors
 /// on top of that.
-pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
+pub enum Error<E, GPIO: OutputPin> {
     /// An SPI transfer failed.
-    Spi(SPI::Error),
+    Spi(E),
 
     /// A GPIO could not be set.
     Gpio(GPIO::Error),
@@ -29,9 +28,9 @@ pub enum Error<SPI: Transfer<u8>, GPIO: OutputPin> {
     __NonExhaustive(private::Private),
 }
 
-impl<SPI: Transfer<u8>, GPIO: OutputPin> Debug for Error<SPI, GPIO>
+impl<E, GPIO: OutputPin> Debug for Error<E, GPIO>
 where
-    SPI::Error: Debug,
+    E: Debug,
     GPIO::Error: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -44,9 +43,9 @@ where
     }
 }
 
-impl<SPI: Transfer<u8>, GPIO: OutputPin> Display for Error<SPI, GPIO>
+impl<E, GPIO: OutputPin> Display for Error<E, GPIO>
 where
-    SPI::Error: Display,
+    E: Display,
     GPIO::Error: Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
