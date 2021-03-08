@@ -42,7 +42,7 @@ log = { version = "0.4.6", optional = true }
 bitflags = "1.0.4"
 
 [dev-dependencies]
-cortex-m = "0.6.0"
+cortex-m = "0.7.2"
 cortex-m-rt = "0.6.8"
 cortex-m-semihosting = "0.3.3"
 stm32f4xx-hal = { version = "0.7.0", features = ["stm32f401"] }
