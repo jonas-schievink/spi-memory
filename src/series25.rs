@@ -68,6 +68,7 @@ impl fmt::Debug for Identification {
     }
 }
 
+#[repr(u8)]
 #[allow(unused)] // TODO support more features
 enum Opcode {
     /// Read the 8-bit legacy device ID.
@@ -210,7 +211,7 @@ impl<CS: OutputPin> Flash<CS> {
     /// for  securing maximum  write protection. The  device  always  powers-up  in the  normal  operation with  the
     /// standby current of ICC1.   
     pub fn power_down<SPI: Transfer<u8>>(&mut self, spi: &mut SPI) -> Result<(), Error<SPI, CS>> {
-        let mut buf = [Opcode::PowerDown];
+        let mut buf = [Opcode::PowerDown as u8];
         self.command(spi, &mut buf)?;
 
         Ok(())
@@ -233,10 +234,10 @@ impl<CS: OutputPin> Flash<CS> {
         delay: &mut D,
     ) -> Result<(), Error<SPI, CS>> {
         // Same command as reading ID.. Wakes instead of reading ID if not followed by 3 dummy bytes.
-        let mut buf = [Opcode::ReadDeviceId];
+        let mut buf = [Opcode::ReadDeviceId as u8];
         self.command(spi, &mut buf)?;
 
-        delay.delay_us(6);  // Table 9.7: AC Electrical Characteristics: tRES1 = max 3us.
+        delay.delay_us(6); // Table 9.7: AC Electrical Characteristics: tRES1 = max 3us.
 
         Ok(())
     }
