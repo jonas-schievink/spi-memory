@@ -37,7 +37,7 @@ search  = "https://docs.rs/spi-memory/[a-z0-9\\.-]+"
 replace = "https://docs.rs/spi-memory/{{version}}"
 
 [dependencies]
-embedded-hal = "0.2.3"
+embedded-hal = "0.2.5"
 log = { version = "0.4.6", optional = true }
 bitflags = "1.0.4"
 
