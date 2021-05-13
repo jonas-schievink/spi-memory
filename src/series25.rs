@@ -4,7 +4,7 @@ use crate::{utils::HexSlice, BlockDevice, Error, Read};
 use bitflags::bitflags;
 use core::convert::TryInto;
 use core::fmt;
-use embedded_hal::blocking::spi::Transfer;
+use embedded_hal::blocking::{delay::DelayUs, spi::Transfer};
 use embedded_hal::digital::v2::OutputPin;
 
 /// 3-Byte JEDEC manufacturer and device identification.
@@ -90,7 +90,6 @@ enum Opcode {
     BlockErase = 0xD8,
     ChipErase = 0xC7,
     PowerDown = 0xB9,
-    ReleasePowerDown = 0xAB,
 }
 
 bitflags! {
@@ -117,7 +116,7 @@ bitflags! {
 #[derive(Debug)]
 //pub struct Flash<SPI: Transfer<u8>, CS: OutputPin> {
 pub struct Flash<CS: OutputPin> {
-//    spi: &mut SPI,
+    //    spi: &mut SPI,
     cs: CS,
 }
 
@@ -144,7 +143,11 @@ impl<CS: OutputPin> Flash<CS> {
         Ok(this)
     }
 
-    fn command<SPI: Transfer<u8>>(&mut self, spi: &mut SPI, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    fn command<SPI: Transfer<u8>>(
+        &mut self,
+        spi: &mut SPI,
+        bytes: &mut [u8],
+    ) -> Result<(), Error<SPI, CS>> {
         // If the SPI transfer fails, make sure to disable CS anyways
         self.cs.set_low().map_err(Error::Gpio)?;
         let spi_result = spi.transfer(bytes).map_err(Error::Spi);
@@ -154,7 +157,10 @@ impl<CS: OutputPin> Flash<CS> {
     }
 
     /// Reads the JEDEC manufacturer/device identification.
-    pub fn read_jedec_id<SPI: Transfer<u8>>(&mut self, spi: &mut SPI) -> Result<Identification, Error<SPI, CS>> {
+    pub fn read_jedec_id<SPI: Transfer<u8>>(
+        &mut self,
+        spi: &mut SPI,
+    ) -> Result<Identification, Error<SPI, CS>> {
         // Optimistically read 12 bytes, even though some identifiers will be shorter
         let mut buf: [u8; 12] = [0; 12];
         buf[0] = Opcode::ReadJedecId as u8;
@@ -165,7 +171,10 @@ impl<CS: OutputPin> Flash<CS> {
     }
 
     /// Reads the status register.
-    pub fn read_status<SPI: Transfer<u8>>(&mut self, spi: &mut SPI) -> Result<Status, Error<SPI, CS>> {
+    pub fn read_status<SPI: Transfer<u8>>(
+        &mut self,
+        spi: &mut SPI,
+    ) -> Result<Status, Error<SPI, CS>> {
         let mut buf = [Opcode::ReadStatus as u8, 0];
         self.command(spi, &mut buf)?;
 
@@ -186,22 +195,22 @@ impl<CS: OutputPin> Flash<CS> {
 
     /// Enters power down mode.
     /// Datasheet, 8.2.35: Power-down:
-    /// Although  the  standby  current  during  normal  operation  is  relatively  low,  standby  current  can  be  further 
-    /// reduced  with  the  Power-down  instruction.  The  lower  power  consumption  makes  the  Power-down 
-    /// instruction especially useful for battery powered applications (See ICC1 and ICC2 in AC Characteristics). 
-    /// The instruction is initiated by driving the /CS pin low and shifting the instruction code “B9h” as shown in 
+    /// Although  the  standby  current  during  normal  operation  is  relatively  low,  standby  current  can  be  further
+    /// reduced  with  the  Power-down  instruction.  The  lower  power  consumption  makes  the  Power-down
+    /// instruction especially useful for battery powered applications (See ICC1 and ICC2 in AC Characteristics).
+    /// The instruction is initiated by driving the /CS pin low and shifting the instruction code “B9h” as shown in
     /// Figure 44.  
     ///  
-    /// The /CS pin must be driven high after the eighth bit has been latched. If this is not done the Power-down 
-    /// instruction will not be executed. After /CS is driven high, the power-down state will entered within the time 
-    /// duration of tDP (See AC Characteristics). While in the power-down state only the Release Power-down / 
-    /// Device ID (ABh) instruction, which restores the device to normal operation, will be recognized. All other 
-    /// instructions  are  ignored.  This  includes  the  Read  Status  Register  instruction,  which  is  always  available 
-    /// during normal operation. Ignoring all but one instruction makes the Power Down state a useful condition 
-    /// for  securing maximum  write protection. The  device  always  powers-up  in the  normal  operation with  the 
+    /// The /CS pin must be driven high after the eighth bit has been latched. If this is not done the Power-down
+    /// instruction will not be executed. After /CS is driven high, the power-down state will entered within the time
+    /// duration of tDP (See AC Characteristics). While in the power-down state only the Release Power-down /
+    /// Device ID (ABh) instruction, which restores the device to normal operation, will be recognized. All other
+    /// instructions  are  ignored.  This  includes  the  Read  Status  Register  instruction,  which  is  always  available
+    /// during normal operation. Ignoring all but one instruction makes the Power Down state a useful condition
+    /// for  securing maximum  write protection. The  device  always  powers-up  in the  normal  operation with  the
     /// standby current of ICC1.   
     pub fn power_down<SPI: Transfer<u8>>(&mut self, spi: &mut SPI) -> Result<(), Error<SPI, CS>> {
-        let mut buf = [OpCode::PowerDown];
+        let mut buf = [Opcode::PowerDown];
         self.command(spi, &mut buf)?;
 
         Ok(())
@@ -209,29 +218,25 @@ impl<CS: OutputPin> Flash<CS> {
 
     /// Exits Power Down Mode
     /// Datasheet, 8.2.36: Release Power-down:
-    /// The Release from Power-down /  Device ID instruction is  a multi-purpose instruction. It can be used to 
+    /// The Release from Power-down /  Device ID instruction is  a multi-purpose instruction. It can be used to
     /// release the device from the power-down state, or obtain the devices electronic identification (ID) number.   
-    /// To  release the device  from  the  power-down state,  the instruction  is  issued by driving the  /CS  pin low, 
-    /// shifting the instruction code “ABh” and driving /CS high as shown in Figure 45. Release from power-down 
-    /// will  take  the  time  duration  of  tRES1  (See  AC  Characteristics)  before  the  device  will  resume  normal 
-    /// operation  and  other  instructions  are  accepted.  The  /CS  pin  must  remain  high  during  the  tRES1  time 
-    /// duration. 
+    /// To  release the device  from  the  power-down state,  the instruction  is  issued by driving the  /CS  pin low,
+    /// shifting the instruction code “ABh” and driving /CS high as shown in Figure 45. Release from power-down
+    /// will  take  the  time  duration  of  tRES1  (See  AC  Characteristics)  before  the  device  will  resume  normal
+    /// operation  and  other  instructions  are  accepted.  The  /CS  pin  must  remain  high  during  the  tRES1  time
+    /// duration.
     ///
-    /// When used only to obtain the Device ID while not in the power-down state, the instruction is initiated by 
-    /// driving the /CS pin low and shifting the instruction code “ABh” followed by 3-dummy bytes. The Device ID 
-    /// bits are then shifted out on the falling edge of CLK with most significant bit (MSB) first. The Device ID 
-    /// values for the W25Q256JV is listed in Manufacturer and Device Identification table. The Device ID can be 
-    /// read continuously. The instruction is completed by driving /CS high.   
-    ///
-    /// When used to release the device from the power-down state and obtain the Device ID, the instruction is 
-    /// the same as previously described, and shown in Figure 45, except that after /CS is driven high it must 
-    /// remain high for a time duration of tRES2 (See AC Characteristics). After this time duration the device will 
-    /// resume  normal  operation  and  other  instructions  will  be  accepted.  If  the  Release  from  Power-down  / 
-    /// Device ID instruction is issued while an Erase, Program or Write cycle is in process (when BUSY equals 
-    ///1) the instruction is ignored and will not have any effects on the current cycle.  
-    pub fn release_power_down<SPI: Transfer<u8>>(&mut self, spi: &mut SPI) -> Result<(), Error<SPI, CS>> {
-        let mut buf = [OpCode::ReleasePowerDown];
+    /// Note: must manually delay after running this, IOC
+    pub fn release_power_down<SPI: Transfer<u8>, D: DelayUs<u8>>(
+        &mut self,
+        spi: &mut SPI,
+        delay: &mut D,
+    ) -> Result<(), Error<SPI, CS>> {
+        // Same command as reading ID.. Wakes instead of reading ID if not followed by 3 dummy bytes.
+        let mut buf = [Opcode::ReadDeviceId];
         self.command(spi, &mut buf)?;
+
+        delay.delay_us(6);  // Table 9.7: AC Electrical Characteristics: tRES1 = max 3us.
 
         Ok(())
     }
@@ -271,7 +276,12 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Read<u32, SPI, CS> for Flash<CS> {
 }
 
 impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<CS> {
-    fn erase_sectors(&mut self, spi: &mut SPI, addr: u32, amount: usize) -> Result<(), Error<SPI, CS>> {
+    fn erase_sectors(
+        &mut self,
+        spi: &mut SPI,
+        addr: u32,
+        amount: usize,
+    ) -> Result<(), Error<SPI, CS>> {
         for c in 0..amount {
             self.write_enable(spi)?;
 
@@ -289,7 +299,12 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<CS> {
         Ok(())
     }
 
-    fn write_bytes(&mut self, spi: &mut SPI, addr: u32, data: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    fn write_bytes(
+        &mut self,
+        spi: &mut SPI,
+        addr: u32,
+        data: &mut [u8],
+    ) -> Result<(), Error<SPI, CS>> {
         for (c, chunk) in data.chunks_mut(256).enumerate() {
             self.write_enable(spi)?;
 
@@ -316,7 +331,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> BlockDevice<u32, SPI, CS> for Flash<CS> {
     fn erase_all(&mut self, spi: &mut SPI) -> Result<(), Error<SPI, CS>> {
         self.write_enable(spi)?;
         let mut cmd_buf = [Opcode::ChipErase as u8];
-        self.command(spi,&mut cmd_buf)?;
+        self.command(spi, &mut cmd_buf)?;
         self.wait_done(spi)?;
         Ok(())
     }
