@@ -89,6 +89,8 @@ enum Opcode {
     SectorErase = 0x20,
     BlockErase = 0xD8,
     ChipErase = 0xC7,
+    PowerDown = 0xB9,
+    ReleasePowerDown = 0xAB,
 }
 
 bitflags! {
@@ -179,6 +181,58 @@ impl<CS: OutputPin> Flash<CS> {
     fn wait_done<SPI: Transfer<u8>>(&mut self, spi: &mut SPI) -> Result<(), Error<SPI, CS>> {
         // TODO: Consider changing this to a delay based pattern
         while self.read_status(spi)?.contains(Status::BUSY) {}
+        Ok(())
+    }
+
+    /// Enters power down mode.
+    /// Datasheet, 8.2.35: Power-down:
+    /// Although  the  standby  current  during  normal  operation  is  relatively  low,  standby  current  can  be  further 
+    /// reduced  with  the  Power-down  instruction.  The  lower  power  consumption  makes  the  Power-down 
+    /// instruction especially useful for battery powered applications (See ICC1 and ICC2 in AC Characteristics). 
+    /// The instruction is initiated by driving the /CS pin low and shifting the instruction code “B9h” as shown in 
+    /// Figure 44.  
+    ///  
+    /// The /CS pin must be driven high after the eighth bit has been latched. If this is not done the Power-down 
+    /// instruction will not be executed. After /CS is driven high, the power-down state will entered within the time 
+    /// duration of tDP (See AC Characteristics). While in the power-down state only the Release Power-down / 
+    /// Device ID (ABh) instruction, which restores the device to normal operation, will be recognized. All other 
+    /// instructions  are  ignored.  This  includes  the  Read  Status  Register  instruction,  which  is  always  available 
+    /// during normal operation. Ignoring all but one instruction makes the Power Down state a useful condition 
+    /// for  securing maximum  write protection. The  device  always  powers-up  in the  normal  operation with  the 
+    /// standby current of ICC1.   
+    pub fn power_down<SPI: Transfer<u8>>(&mut self, spi: &mut SPI) -> Result<(), Error<SPI, CS>> {
+        let mut buf = [OpCode::PowerDown];
+        self.command(spi, &mut buf)?;
+
+        Ok(())
+    }
+
+    /// Exits Power Down Mode
+    /// Datasheet, 8.2.36: Release Power-down:
+    /// The Release from Power-down /  Device ID instruction is  a multi-purpose instruction. It can be used to 
+    /// release the device from the power-down state, or obtain the devices electronic identification (ID) number.   
+    /// To  release the device  from  the  power-down state,  the instruction  is  issued by driving the  /CS  pin low, 
+    /// shifting the instruction code “ABh” and driving /CS high as shown in Figure 45. Release from power-down 
+    /// will  take  the  time  duration  of  tRES1  (See  AC  Characteristics)  before  the  device  will  resume  normal 
+    /// operation  and  other  instructions  are  accepted.  The  /CS  pin  must  remain  high  during  the  tRES1  time 
+    /// duration. 
+    ///
+    /// When used only to obtain the Device ID while not in the power-down state, the instruction is initiated by 
+    /// driving the /CS pin low and shifting the instruction code “ABh” followed by 3-dummy bytes. The Device ID 
+    /// bits are then shifted out on the falling edge of CLK with most significant bit (MSB) first. The Device ID 
+    /// values for the W25Q256JV is listed in Manufacturer and Device Identification table. The Device ID can be 
+    /// read continuously. The instruction is completed by driving /CS high.   
+    ///
+    /// When used to release the device from the power-down state and obtain the Device ID, the instruction is 
+    /// the same as previously described, and shown in Figure 45, except that after /CS is driven high it must 
+    /// remain high for a time duration of tRES2 (See AC Characteristics). After this time duration the device will 
+    /// resume  normal  operation  and  other  instructions  will  be  accepted.  If  the  Release  from  Power-down  / 
+    /// Device ID instruction is issued while an Erase, Program or Write cycle is in process (when BUSY equals 
+    ///1) the instruction is ignored and will not have any effects on the current cycle.  
+    pub fn release_power_down<SPI: Transfer<u8>>(&mut self, spi: &mut SPI) -> Result<(), Error<SPI, CS>> {
+        let mut buf = [OpCode::ReleasePowerDown];
+        self.command(spi, &mut buf)?;
+
         Ok(())
     }
 }
