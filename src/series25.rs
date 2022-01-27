@@ -141,7 +141,7 @@ impl<SPI: Transfer<u8>, CS: OutputPin> Flash<SPI, CS> {
         Ok(this)
     }
 
-    fn command(&mut self, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
+    pub fn command(&mut self, bytes: &mut [u8]) -> Result<(), Error<SPI, CS>> {
         // If the SPI transfer fails, make sure to disable CS anyways
         self.cs.set_low().map_err(Error::Gpio)?;
         let spi_result = self.spi.transfer(bytes).map_err(Error::Spi);
